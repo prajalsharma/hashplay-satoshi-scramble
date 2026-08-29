@@ -89,26 +89,27 @@ export function App() {
   };
 
   return (
-    <div className="shell stack">
-      <header className="row spread">
+    <div className="shell">
+      <header className="marquee">
         <div>
-          <div className="sub">HASHPLAY / COINUP</div>
-          <h1>SATOSHI SCRAMBLE</h1>
-          <div className="sub">GRAB. BANK. ESCAPE. · <span className="tag live">{NETWORK_LABEL}</span></div>
+          <div className="brand-kicker">ARCADE · GRAB · BANK · ESCAPE</div>
+          <h1 className="title"><span className="swords">⚔</span> SATOSHI SCRAMBLE</h1>
+          <div className="tagline">
+            LOOT THE ARENA — NOTHING'S YOURS UNTIL YOU BANK IT ·{" "}
+            <span className="tag hot">{NETWORK_LABEL} · NO REAL VALUE</span>
+          </div>
         </div>
-        <div className="panel" style={{ minWidth: 250, textAlign: "right" }}>
+        <div className="chip">
           {signer ? (
-            <div className="stack" style={{ gap: 6 }}>
-              <div style={{ fontSize: 10 }}>{signer.label}</div>
-              <div style={{ fontSize: 12, color: "var(--green)" }}>
-                {balance === null ? "…" : formatAsset(balance)}
-              </div>
-              <div className="note">STAKE ASSET: aBTC · TESTNET · NO REAL VALUE</div>
-              <div className="row" style={{ justifyContent: "flex-end" }}>
+            <>
+              <div className="who">{signer.label.toUpperCase()}</div>
+              <div className="bal">{balance === null ? "…" : formatAsset(balance)}</div>
+              <div className="asset">aBTC · TESTNET · TEST FUNDS ONLY</div>
+              <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
                 <button className="btn small ghost" onClick={() => setModal(true)}>SWITCH</button>
                 <button className="btn small" onClick={logOut}>LOG OUT</button>
               </div>
-            </div>
+            </>
           ) : (
             <button className="btn" onClick={() => { setWallets(detectWallets()); setModal(true); }}>
               CONNECT WALLET
@@ -121,9 +122,9 @@ export function App() {
 
       {modal && (
         <div className="modal-back" onClick={() => setModal(false)}>
-          <div className="panel modal stack" onClick={(e) => e.stopPropagation()}>
+          <div className="panel accent modal stack" onClick={(e) => e.stopPropagation()}>
             <div className="row spread">
-              <span style={{ fontSize: 12 }}>CONNECT WALLET</span>
+              <span style={{ fontSize: 13, color: "var(--gold)" }}>CONNECT WALLET</span>
               <button className="btn small ghost" onClick={() => setModal(false)}>✕</button>
             </div>
             {ROSTER.map((k) => {
@@ -168,7 +169,7 @@ export function App() {
       )}
 
       <footer className="row spread">
-        <span className="note">{RULESET_VERSION} · PROVABLY ACCOUNTED · WINNERS PAID ON-CHAIN · {NETWORK_LABEL}</span>
+        <span className="foot">{RULESET_VERSION} · PROVABLY ACCOUNTED · WINNERS PAID ON-CHAIN · {NETWORK_LABEL} · NO REAL VALUE</span>
       </footer>
     </div>
   );
@@ -206,20 +207,28 @@ function Home(props: {
     return () => clearInterval(t);
   }, []);
 
+  const HOW = [
+    <>UP TO <b>8 HUNTERS</b> SHARE ONE ARENA FOR {MATCH_SECONDS} SECONDS.</>,
+    <>GRAB LOOT → IT'S <b>CARRYING</b>, AND CARRYING IS NOT SAFE.</>,
+    <>RUN IT TO THE <b>BANK</b> ZONE → BANKED LOOT CAN NEVER BE TAKEN.</>,
+    <>BUMP A RICHER HUNTER AND <b>HALF THEIR CARRY SPILLS</b> ON THE FLOOR.</>,
+    <>A <b>GIANT CACHE</b> DROPS WITH 20 SECONDS LEFT. ONE MORE RUN?</>,
+    <>MOST BANKED WINS. ENTRY <b>{formatAsset(ENTRY_BASE_UNITS)}</b> — TOP 3 SPLIT 70/20/10 (WINNER TAKES ALL UNDER 4). CONTROLS: <b>WASD / ARROWS</b>.</>,
+  ];
   return (
-    <div className="stack">
-      <div className="panel stack">
-        <div style={{ fontSize: 12, color: "var(--gold)" }}>HOW TO PLAY</div>
-        <div className="note" style={{ fontSize: 9 }}>
-          1. UP TO 8 HUNTERS SHARE ONE ARENA FOR {MATCH_SECONDS} SECONDS.<br />
-          2. GRAB LOOT — IT GOES TO “CARRYING”, AND CARRYING IS NOT SAFE.<br />
-          3. RUN IT TO THE BANK ZONE — BANKED LOOT CAN NEVER BE TAKEN.<br />
-          4. BUMP A RICHER HUNTER AND HALF THEIR CARRY SPILLS ON THE FLOOR.<br />
-          5. A GIANT CACHE DROPS WITH 20 SECONDS LEFT. ONE MORE RUN?<br />
-          6. MOST BANKED WINS. ENTRY {formatAsset(ENTRY_BASE_UNITS)} EACH — TOP 3 SPLIT THE POT
-          70/20/10 (WINNER TAKES ALL UNDER 4 PLAYERS). CONTROLS: WASD / ARROWS.
+    <div className="grid-2">
+      <div className="panel accent stack">
+        <div style={{ fontSize: 13, color: "var(--gold)" }}>HOW TO PLAY</div>
+        <div className="steps">
+          {HOW.map((t, i) => (
+            <div className="step" key={i}>
+              <span className="n">{i + 1}</span>
+              <span className="t">{t}</span>
+            </div>
+          ))}
         </div>
       </div>
+      <div className="stack">
 
       <div className="row spread">
         <div className="row">
@@ -248,7 +257,7 @@ function Home(props: {
 
       <div className="panel stack">
         <div className="row spread">
-          <span style={{ fontSize: 12 }}>PUBLIC ROOMS</span>
+          <span style={{ fontSize: 13, color: "var(--orange)" }}>PUBLIC ROOMS</span>
           <span className={`tag ${serverUp ? "live" : "warn"}`}>
             {serverUp === null ? "…" : serverUp ? "SERVER ONLINE" : "SERVER OFFLINE"}
           </span>
@@ -259,15 +268,15 @@ function Home(props: {
           </div>
         )}
         {rooms.map((r) => (
-          <div key={r.room} className="row spread" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+          <div key={r.room} className="room">
             <div>
-              <div style={{ fontSize: 11 }}>{r.room}</div>
-              <div className="note">
-                {r.players} / {r.capacity} · ENTRY {formatAsset(BigInt(r.entryBaseUnits))} · {String(r.state).toUpperCase()}
+              <div className="rname">{r.room}</div>
+              <div className="rmeta">
+                {r.players}/{r.capacity} · {formatAsset(BigInt(r.entryBaseUnits))} · {String(r.state).toUpperCase()}
               </div>
             </div>
             <button
-              className="btn green"
+              className="btn green small"
               disabled={!serverUp || r.players >= r.capacity || r.state === "live" || r.state === "countdown"}
               onClick={() => (props.signer ? props.onLive() : props.onNeedWallet())}
             >
@@ -275,6 +284,7 @@ function Home(props: {
             </button>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
@@ -313,23 +323,29 @@ function ArenaView(props: {
   }, [props]);
 
   return (
-    <div className="stack">
-      <div className="hud">
-        <span>BANKED <b>{hud.banked}</b></span>
-        <span className="carrying">CARRYING {hud.carrying}{hud.carrying !== "0" ? " ⚠" : ""}</span>
-        <span className={`timer ${hud.time <= 10 && hud.phase === "live" ? "hot" : ""}`}>
-          {String(Math.floor(hud.time / 60)).padStart(2, "0")}:{String(hud.time % 60).padStart(2, "0")}
-        </span>
-        <span className="note">PLAYERS {props.leaderboard.length || "…"}</span>
+    <div className="grid-2">
+      <div className="stack">
+        <div className="hud">
+          <span className="stat bank">BANKED <b>{hud.banked}</b></span>
+          <span className="stat carry">CARRYING <b>{hud.carrying}{hud.carrying !== "0" ? " ⚠" : ""}</b></span>
+          <span className={`stat time ${hud.time <= 10 && hud.phase === "live" ? "hot" : ""}`}>
+            TIME <b>{String(Math.floor(hud.time / 60)).padStart(2, "0")}:{String(hud.time % 60).padStart(2, "0")}</b>
+          </span>
+          <span className="stat">HUNTERS <b>{props.leaderboard.length || "…"}</b></span>
+        </div>
+        <div className="cabinet">
+          <div className="arena-wrap">
+            <canvas ref={canvasRef} className="arena" width={CANVAS_W} height={CANVAS_H} />
+            {props.overlay}
+          </div>
+        </div>
       </div>
-      <div className="arena-wrap">
-        <canvas ref={canvasRef} className="arena" width={CANVAS_W} height={CANVAS_H} />
-        {props.overlay}
-      </div>
-      <div className="panel board">
+      <div className="panel accent board">
+        <div style={{ fontSize: 12, color: "var(--gold)", marginBottom: 6 }}>LEADERBOARD</div>
+        {props.leaderboard.length === 0 && <div className="note">WAITING FOR THE SCRAMBLE…</div>}
         {props.leaderboard.map((r) => (
-          <div key={r.id} className={`row spread ${r.id === props.selfId ? "you" : ""}`}>
-            <span>#{r.rank} {r.alias.toUpperCase()}{r.id === props.selfId ? " (YOU)" : ""}</span>
+          <div key={r.id} className={`lb ${r.id === props.selfId ? "you" : ""}`}>
+            <span><span className="rk">#{r.rank}</span>{r.alias.toUpperCase()}{r.id === props.selfId ? " (YOU)" : ""}</span>
             <span>{r.banked}</span>
           </div>
         ))}

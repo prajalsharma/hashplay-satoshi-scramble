@@ -21,12 +21,13 @@ export type View = {
   phase: string;
 };
 
-export const PLAYER_COLORS = ["#fcc76e", "#2962ff", "#ff4ec7", "#00de76", "#ff5a00", "#8be9fd", "#bd93f9", "#f1fa8c"];
+// Warm arcade palette (Arch-adjacent orange/cream/purple family).
+export const PLAYER_COLORS = ["#ec641d", "#736fb9", "#ffcf6e", "#35d38a", "#ff7d33", "#8be9fd", "#f3efd7", "#ff5a4d"];
 
 const LOOT_STYLE: Record<LootKind, { size: number; color: string }> = {
-  small: { size: 10, color: "#fcc76e" },
-  medium: { size: 14, color: "#ffb020" },
-  large: { size: 22, color: "#ff5a00" },
+  small: { size: 11, color: "#ffcf6e" },
+  medium: { size: 15, color: "#ff9d3c" },
+  large: { size: 24, color: "#ec641d" },
 };
 
 export const CANVAS_W = TILES_X * TILE_PX;
@@ -39,17 +40,17 @@ export function drawArena(ctx: CanvasRenderingContext2D, view: View, nowMs: numb
     for (let tx = 0; tx < TILES_X; tx++) {
       const ch = MAP_ROWS[ty]![tx]!;
       if (ch === "#") {
-        ctx.fillStyle = "#1b1b33";
+        ctx.fillStyle = "#2a2420";
         ctx.fillRect(tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX);
-        ctx.fillStyle = "#26264a";
+        ctx.fillStyle = "#3a322b";
         ctx.fillRect(tx * TILE_PX, ty * TILE_PX, TILE_PX, 4);
       } else {
-        ctx.fillStyle = (tx + ty) % 2 === 0 ? "#05051a" : "#070720";
+        ctx.fillStyle = (tx + ty) % 2 === 0 ? "#0d0a08" : "#120e0b";
         ctx.fillRect(tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX);
         if (isBank(tx, ty)) {
-          ctx.fillStyle = "#00351f";
+          ctx.fillStyle = "#0e2a1a";
           ctx.fillRect(tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX);
-          ctx.strokeStyle = "#00de76";
+          ctx.strokeStyle = "#35d38a";
           ctx.lineWidth = 2;
           ctx.strokeRect(tx * TILE_PX + 2, ty * TILE_PX + 2, TILE_PX - 4, TILE_PX - 4);
         }
@@ -57,7 +58,7 @@ export function drawArena(ctx: CanvasRenderingContext2D, view: View, nowMs: numb
     }
   }
   // BANK label
-  ctx.fillStyle = "#00de76";
+  ctx.fillStyle = "#35d38a";
   ctx.font = "8px 'Press Start 2P', monospace";
   ctx.textAlign = "center";
   ctx.fillText("BANK", 12 * TILE_PX, 13.5 * TILE_PX - 20);
@@ -74,7 +75,7 @@ export function drawArena(ctx: CanvasRenderingContext2D, view: View, nowMs: numb
     ctx.fillRect(px - s / 2, py - s / 2, s, s);
     ctx.fillStyle = "#14100a";
     ctx.font = "7px 'Press Start 2P', monospace";
-    ctx.fillText("₿", px, py + 3);
+    ctx.fillText("$", px, py + 3);
   }
 
   // Players
@@ -88,7 +89,7 @@ export function drawArena(ctx: CanvasRenderingContext2D, view: View, nowMs: numb
     ctx.fillStyle = PLAYER_COLORS[p.colorIdx % PLAYER_COLORS.length]!;
     ctx.fillRect(px - size / 2, py - size / 2, size, size);
     // eyes — cheap personality, pixel-law compliant
-    ctx.fillStyle = "#000012";
+    ctx.fillStyle = "#0d0a08";
     ctx.fillRect(px - 5, py - 4, 4, 4);
     ctx.fillRect(px + 1, py - 4, 4, 4);
     if (p.isSelf) {
@@ -101,7 +102,7 @@ export function drawArena(ctx: CanvasRenderingContext2D, view: View, nowMs: numb
     ctx.fillStyle = p.connected ? "#ffffff" : "#555568";
     ctx.fillText(p.alias.slice(0, 10).toUpperCase(), px, py - size / 2 - 8);
     if (p.carrying > 0n) {
-      ctx.fillStyle = "#ff4ec7";
+      ctx.fillStyle = "#ffcf6e";
       ctx.fillText(`+${p.carrying}`, px, py + size / 2 + 12);
     }
   }

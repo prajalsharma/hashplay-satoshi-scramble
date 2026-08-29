@@ -28,7 +28,9 @@ export const ASSET_MINT_HEX: string =
 export const GAME_WS_URL: string =
   (import.meta as any).env?.VITE_GAME_WS_URL?.trim?.() || "ws://127.0.0.1:8890";
 
-export const NETWORK_LABEL = "ARCH TESTNET";
+/** User-facing network label — honest (testnet, no real value) without
+ *  implying any official chain affiliation. */
+export const NETWORK_LABEL = "TESTNET";
 
 /** 10_000 → "0.0001 aBTC" (8 decimals). Display only — math stays bigint. */
 export function formatAsset(baseUnits: bigint): string {

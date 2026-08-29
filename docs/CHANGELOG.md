@@ -65,3 +65,14 @@ capped backoff, no wallet re-prompt on reconnect (token resume). UX: removed
 auto-generated/persisted identity on page load — nothing shows before you act;
 the connected wallet is your live identity, the practice name is opt-in.
 No gameplay/economy changes. All tests green (unit 13 + 2p + 4p/8p + disconnect).
+
+**2026-08-29 · UI overhaul (warm arcade cabinet theme)** — Full visual redesign:
+marquee header with glow, arcade-cabinet bezel around a much larger arena
+(canvas upscaled to min(1040px,92vw), crisp pixelated), two-column layout
+(arena + live leaderboard; how-to steps + rooms on home), chunky tactile
+buttons, layered warm panels, restyled HUD/leaderboard/modal, CRT
+scanlines+vignette. Palette is a warm orange/cream/purple system on near-black
+(orange #ec641d, cream #f3efd7, purple #736fb9). Player/loot/arena colors
+retinted to match. User-facing network label shortened to "TESTNET · NO REAL
+VALUE" — no chain-brand wording that could imply official affiliation. No
+gameplay/logic/economy changes; all 13 unit tests + build green.
