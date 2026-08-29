@@ -18,7 +18,14 @@ export type ArchSigner = {
   publicKey: Uint8Array; // x-only 32B — the Arch identity
   publicKeyHex: string;
   address?: string;
+  /** Sign a 32-byte Arch transaction message hash (challenge = its 64-hex UTF-8). */
   sign: (challenge: Uint8Array) => Promise<Uint8Array>;
+  /**
+   * Sign a READABLE login message (SIWE-style). Distinct from `sign`: it goes
+   * through the wallet's message-signing UI over human text, so it can never
+   * be mistaken for — or replayed as — a transaction signature.
+   */
+  signLogin: (message: string) => Promise<Uint8Array>;
 };
 
 export const WALLET_LABELS: Record<WalletKind, string> = {
@@ -38,7 +45,19 @@ export function localSigner(secretKey: Uint8Array, label = "local"): ArchSigner 
   return {
     kind: "local", label, publicKey, publicKeyHex: bytesToHex(publicKey),
     sign: async (c) => signChallengeBip322(secretKey, publicKey, c),
+    signLogin: async (msg) => signChallengeBip322(secretKey, publicKey, new TextEncoder().encode(msg)),
   };
+}
+
+/** Some wallets return signatures base64-encoded, some hex — accept both. */
+function anySigToBytes(sig: string | Uint8Array): Uint8Array {
+  if (sig instanceof Uint8Array) return sig;
+  if (/^[0-9a-f]+$/i.test(sig) && sig.length % 2 === 0 && sig.length >= 128) {
+    const out = new Uint8Array(sig.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(sig.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+  return base64ToBytes(sig);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +193,11 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
         const res = await p.signArchMessageHash(raw);
         return hexSigTo64(String(res?.signature64Hex ?? ""));
       },
+      signLogin: async (msg) => {
+        // Message signing (readable) — NOT signArchMessageHash. Cannot be a tx.
+        const res = await p.signMessage(new TextEncoder().encode(msg));
+        return extractSchnorr(anySigToBytes(res?.signature ?? res));
+      },
     };
   }
 
@@ -188,6 +212,8 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
       address, publicKey: hexToBytes32(pubkeyHex), publicKeyHex: pubkeyHex,
       sign: async (challenge) =>
         extractSchnorr(base64ToBytes(await w.unisat.signMessage(challengeToHexString(challenge), "bip322-simple"))),
+      signLogin: async (msg) =>
+        extractSchnorr(base64ToBytes(await w.unisat.signMessage(msg, "bip322-simple"))),
     };
   }
 
@@ -214,6 +240,13 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
         if (!sig) throw new Error("Xverse returned no signature");
         return extractSchnorr(base64ToBytes(sig));
       },
+      signLogin: async (msg) => {
+        const r = await provider.request("signMessage", { address, message: msg, protocol: "BIP322" });
+        if (r?.status === "error") throw new Error(r.error?.message ?? "Xverse declined");
+        const sig = r?.status === "success" ? r.result?.signature : (r?.result?.signature ?? r?.signature);
+        if (!sig) throw new Error("Xverse returned no signature");
+        return extractSchnorr(base64ToBytes(sig));
+      },
     };
   }
 
@@ -230,6 +263,10 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
       address, publicKey: hexToBytes32(pubkeyHex), publicKeyHex: pubkeyHex,
       sign: async (challenge) => {
         const { signature } = await btcp.signMessage(address, new TextEncoder().encode(challengeToHexString(challenge)));
+        return extractSchnorr(signature instanceof Uint8Array ? signature : base64ToBytes(String(signature)));
+      },
+      signLogin: async (msg) => {
+        const { signature } = await btcp.signMessage(address, new TextEncoder().encode(msg));
         return extractSchnorr(signature instanceof Uint8Array ? signature : base64ToBytes(String(signature)));
       },
     };
@@ -251,6 +288,12 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
       const r = await provider.request("signMessage", {
         message: challengeToHexString(challenge), paymentType: "p2tr",
       });
+      const sig = r?.result?.signature;
+      if (!sig) throw new Error("Leather returned no signature");
+      return extractSchnorr(base64ToBytes(sig));
+    },
+    signLogin: async (msg) => {
+      const r = await provider.request("signMessage", { message: msg, paymentType: "p2tr" });
       const sig = r?.result?.signature;
       if (!sig) throw new Error("Leather returned no signature");
       return extractSchnorr(base64ToBytes(sig));

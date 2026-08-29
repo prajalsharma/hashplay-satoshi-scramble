@@ -8,6 +8,17 @@ import type { LootKind, MatchPhase } from "./types";
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * The session sign-in message. READABLE and clearly not a transaction, so a
+ * login signature can never be replayed as a transaction signature (a tx
+ * challenge is a bare 64-hex hash; this is a prefixed human sentence). Both
+ * client and server derive it identically from the server's nonce.
+ */
+export const loginMessage = (nonceHex: string): string =>
+  `Satoshi Scramble — sign in to play\n` +
+  `nonce: ${nonceHex}\n` +
+  `This proves you own this wallet. It authorizes NO transfer.`;
+
 // ---- client → server -------------------------------------------------------
 
 export type ClientMsg =

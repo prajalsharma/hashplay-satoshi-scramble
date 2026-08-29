@@ -6,7 +6,7 @@
 
 import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { parseClientMsg, enc, type ServerMsg } from "../../src/shared/protocol";
+import { parseClientMsg, enc, loginMessage, type ServerMsg } from "../../src/shared/protocol";
 import { PROTOCOL_VERSION } from "../../src/shared/protocol";
 import { verifyChallengeBip322 } from "../../src/arch/bip322";
 import { chainEnabled, ensureServerFunded, newNonceHex, newTokenHex, serverSigner } from "./chain";
@@ -93,7 +93,8 @@ wss.on("connection", (ws: WebSocket, req) => {
           return;
         }
         const pub = Uint8Array.from(Buffer.from(state.pendingPubkey, "hex"));
-        const challenge = new TextEncoder().encode(state.nonceHex);
+        // Verify the SIWE-style readable login message (not a raw hash).
+        const challenge = new TextEncoder().encode(loginMessage(state.nonceHex));
         const sig = Uint8Array.from(Buffer.from(msg.sig64Hex, "hex"));
         if (!verifyChallengeBip322(pub, challenge, sig)) {
           send(ws, { s: "error", code: "auth_failed", message: "signature did not verify" });

@@ -56,3 +56,12 @@ testnet-e2e.mts guards (duplicate-join, double-settle, reclaim-after-settle).
 No gameplay/architecture changes. Faucet still down — on-chain steps remain
 BLOCKED-EXTERNAL, fully scripted.
 Test status: 4-player VERIFIED, 8-player VERIFIED (see scaling.test.mts)
+
+**2026-08-29 · Wallet-safety fix + UX standards** — SECURITY: session sign-in
+no longer signs a raw hash (replay-as-transaction risk); it now signs a
+readable SIWE-style message via the wallet's message-signing UI, domain-
+separated from transactions (regression test added). Reconnect hardened:
+capped backoff, no wallet re-prompt on reconnect (token resume). UX: removed
+auto-generated/persisted identity on page load — nothing shows before you act;
+the connected wallet is your live identity, the practice name is opt-in.
+No gameplay/economy changes. All tests green (unit 13 + 2p + 4p/8p + disconnect).

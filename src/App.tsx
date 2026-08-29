@@ -25,16 +25,20 @@ import type { RoomInfo } from "./shared/protocol";
 const ROSTER: WalletKind[] = ["arch", "xverse", "phantom", "unisat", "leather"];
 const ALIAS_KEY = "scramble.alias.v1";
 
-const getAlias = (): string => {
-  try {
-    const a = localStorage.getItem(ALIAS_KEY);
-    if (a) return a;
-    const fresh = `HUNTER-${Math.floor(1000 + Math.random() * 9000)}`;
-    localStorage.setItem(ALIAS_KEY, fresh);
-    return fresh;
-  } catch {
-    return "HUNTER";
-  }
+/**
+ * Read a previously-chosen practice name; DO NOT invent/persist one on page
+ * load (standard web3: no identity before the user acts). `ensureAlias`
+ * lazily mints one only when a name is actually needed (entering practice).
+ */
+const readAlias = (): string => {
+  try { return localStorage.getItem(ALIAS_KEY) ?? ""; } catch { return ""; }
+};
+const ensureAlias = (): string => {
+  const existing = readAlias();
+  if (existing) return existing;
+  const fresh = `HUNTER-${Math.floor(1000 + Math.random() * 9000)}`;
+  try { localStorage.setItem(ALIAS_KEY, fresh); } catch { /* ephemeral */ }
+  return fresh;
 };
 
 type Mode = "home" | "practice" | "live";
@@ -44,7 +48,7 @@ export function App() {
   const [signer, setSigner] = useState<ArchSigner | null>(null);
   const [wallets, setWallets] = useState<WalletKind[]>([]);
   const [modal, setModal] = useState(false);
-  const [alias, setAlias] = useState(getAlias);
+  const [alias, setAlias] = useState(readAlias);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [walletMsg, setWalletMsg] = useState("");
 
@@ -153,9 +157,14 @@ export function App() {
           onNeedWallet={() => setModal(true)}
         />
       )}
-      {mode === "practice" && <Practice alias={alias} onExit={() => setMode("home")} />}
+      {mode === "practice" && <Practice alias={alias || ensureAlias()} onExit={() => setMode("home")} />}
       {mode === "live" && signer && (
-        <Live signer={signer} alias={alias} onExit={() => setMode("home")} onBalance={refreshBalance} />
+        <Live
+          signer={signer}
+          alias={alias || signer.label}
+          onExit={() => setMode("home")}
+          onBalance={refreshBalance}
+        />
       )}
 
       <footer className="row spread">
@@ -214,18 +223,27 @@ function Home(props: {
 
       <div className="row spread">
         <div className="row">
-          <span style={{ fontSize: 10 }}>YOU ARE {props.alias}</span>
-          <button
-            className="btn small ghost"
-            onClick={() => {
-              const n = window.prompt("Pick a hunter name (max 20)", props.alias);
-              if (n?.trim()) props.onAlias(n.trim().slice(0, 20).toUpperCase());
-            }}
-          >
-            ✎
-          </button>
+          {props.signer ? (
+            <span style={{ fontSize: 10 }}>PLAYING AS {props.signer.label}</span>
+          ) : (
+            <span className="note">CONNECT A WALLET TO PLAY LIVE · OR JUST PRACTICE →</span>
+          )}
         </div>
-        <button className="btn ghost" onClick={props.onPractice}>🕹 PRACTICE (NO WALLET)</button>
+        <div className="row">
+          {(props.alias || "") && (
+            <button
+              className="btn small ghost"
+              title="Your practice display name"
+              onClick={() => {
+                const n = window.prompt("Practice name (max 20)", props.alias);
+                if (n?.trim()) props.onAlias(n.trim().slice(0, 20).toUpperCase());
+              }}
+            >
+              ✎ {props.alias}
+            </button>
+          )}
+          <button className="btn ghost" onClick={props.onPractice}>🕹 PRACTICE (NO WALLET)</button>
+        </div>
       </div>
 
       <div className="panel stack">

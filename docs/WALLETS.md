@@ -22,6 +22,8 @@ NETWORK. Connect flow: nothing connects uninvited; explicit CONNECT WALLET →
 modal (Arch Wallet on top with INSTALLED/NOT DETECTED badges, then the
 roster); persisted choice; LOG OUT calls provider disconnect where supported.
 
+Session auth signs a READABLE login message (SIWE-style), NEVER a raw hash — a login signature can never be replayed as a transaction (docs/SECURITY.md, tests/security.test.ts).
+
 Test log (to be appended as each human test happens): 2026-08-28 — Arch
 Wallet on Brave/macOS, testnet, official aUSD: connect ✓ sign ✓ submit ✓
 escrow ✓ (sibling project, user-executed).

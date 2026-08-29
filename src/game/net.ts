@@ -6,7 +6,7 @@
 
 import { GAME_WS_URL } from "../arch/config";
 import type { ArchSigner } from "../arch/signer";
-import { enc, type RoomInfo, type ServerMsg } from "../shared/protocol";
+import { enc, loginMessage, type RoomInfo, type ServerMsg } from "../shared/protocol";
 import { integrateMovement } from "../shared/sim";
 import type { View, ViewLoot, ViewPlayer } from "./renderer";
 
@@ -64,45 +64,84 @@ export class GameClient {
     this.alias = alias;
   }
 
+  private reconnects = 0;
+  private stopped = false;
+  private authedOnce = false;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+
   connect(): void {
     const ws = new WebSocket(`${GAME_WS_URL}/ws`);
     this.ws = ws;
-    ws.onopen = () => this.push({ phase: "connecting" });
-    ws.onclose = () => {
-      if (this.state.phase !== "error") this.push({ error: "CONNECTION LOST — RECONNECTING…" });
-      setTimeout(() => this.resumeOrReconnect(), 1500);
-    };
+    ws.onopen = () => { this.reconnects = 0; this.push({ phase: "connecting" }); };
+    ws.onclose = () => this.scheduleReconnect();
     ws.onmessage = (ev) => void this.onMsg(JSON.parse(String(ev.data)) as ServerMsg);
-    setInterval(() => {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = setInterval(() => {
       if (ws.readyState === ws.OPEN) ws.send(enc({ c: "ping", t: Date.now() }));
     }, 5000);
   }
 
+  /** Explicit teardown so nothing keeps prompting after leaving live mode. */
+  close(): void {
+    this.stopped = true;
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    try { this.ws?.close(); } catch { /* ignore */ }
+  }
+
+  /**
+   * Reconnect with capped exponential backoff. On reconnect we ONLY resume via
+   * the stored token (no wallet re-sign) — a downed server can never trigger
+   * repeated wallet prompts. After the cap, we surface an error and stop.
+   */
+  private scheduleReconnect(): void {
+    if (this.stopped) return;
+    if (this.reconnects >= 6) {
+      this.push({ phase: "error", error: "GAME SERVER UNREACHABLE — TRY AGAIN LATER OR USE PRACTICE MODE" });
+      return;
+    }
+    const delay = Math.min(15000, 1500 * 2 ** this.reconnects);
+    this.reconnects++;
+    this.push({ error: `CONNECTION LOST — RECONNECTING (${this.reconnects}/6)…` });
+    setTimeout(() => this.resumeOrReconnect(), delay);
+  }
+
   private resumeOrReconnect(): void {
+    if (this.stopped) return;
     const token = sessionStorage.getItem(RESUME_KEY);
     const ws = new WebSocket(`${GAME_WS_URL}/ws`);
     this.ws = ws;
     ws.onmessage = (ev) => void this.onMsg(JSON.parse(String(ev.data)) as ServerMsg);
-    ws.onopen = () => {
-      if (token) ws.send(enc({ c: "resume", resumeToken: token }));
-    };
-    ws.onclose = () => setTimeout(() => this.resumeOrReconnect(), 2500);
+    // The challenge handler decides: resume via token (no re-sign) if we have
+    // a session, else a single fresh sign-in. Nothing to do on open here.
+    void token;
+    ws.onopen = () => { this.reconnects = 0; };
+    ws.onclose = () => this.scheduleReconnect();
   }
 
   private async onMsg(m: ServerMsg): Promise<void> {
     switch (m.s) {
       case "challenge": {
+        // Already have a session? Resume with the token — never re-prompt the
+        // wallet on a reconnect. A single sign-in per session, by design.
+        const existing = sessionStorage.getItem(RESUME_KEY);
+        if (existing && this.authedOnce) {
+          this.ws!.send(enc({ c: "resume", resumeToken: existing }));
+          return;
+        }
         this.push({ phase: "authing" });
         this.ws!.send(enc({ c: "hello", pubkey: this.signer.publicKeyHex, alias: this.alias }));
         try {
-          const sig = await this.signer.sign(new TextEncoder().encode(m.nonceHex));
+          // SIWE-style: sign a READABLE login message, never a raw hash. This
+          // signature can never be replayed as a transaction (see protocol.ts).
+          const sig = await this.signer.signLogin(loginMessage(m.nonceHex));
           this.ws!.send(enc({ c: "auth", sig64Hex: [...sig].map((b) => b.toString(16).padStart(2, "0")).join("") }));
         } catch (e) {
-          this.push({ phase: "error", error: `WALLET DECLINED SESSION SIGNATURE — ${(e as Error).message}`.toUpperCase() });
+          this.push({ phase: "error", error: `WALLET DECLINED SIGN-IN — ${(e as Error).message}`.toUpperCase() });
         }
         return;
       }
       case "welcome":
+        this.authedOnce = true;
         sessionStorage.setItem(RESUME_KEY, m.resumeToken);
         this.push({ phase: this.state.room ? this.state.phase : "rooms" });
         return;

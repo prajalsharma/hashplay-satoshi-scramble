@@ -15,6 +15,7 @@ import { WebSocket } from "ws";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { signChallengeBip322 } from "../src/arch/bip322.ts";
+import { loginMessage } from "../src/shared/protocol.ts";
 
 const PORT = 8899;
 
@@ -57,7 +58,7 @@ function connect(alias: string): Promise<Client> {
       client.events.push(m.s);
       if (m.s === "challenge") {
         ws.send(JSON.stringify({ c: "hello", pubkey, alias }));
-        const sig = signChallengeBip322(sk, pk, new TextEncoder().encode(m.nonceHex));
+        const sig = signChallengeBip322(sk, pk, new TextEncoder().encode(loginMessage(m.nonceHex)));
         ws.send(JSON.stringify({ c: "auth", sig64Hex: bytesToHex(sig) }));
       } else if (m.s === "welcome") {
         resolve(client);

@@ -14,6 +14,7 @@ import { WebSocket } from "ws";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { signChallengeBip322 } from "../src/arch/bip322.ts";
+import { loginMessage } from "../src/shared/protocol.ts";
 
 
 
@@ -51,7 +52,7 @@ function makeClient(port: number, alias: string, room: string, opts: { move?: bo
       c.events.push(m.s);
       if (m.s === "challenge") {
         ws.send(JSON.stringify({ c: "hello", pubkey: c.pubkey, alias }));
-        ws.send(JSON.stringify({ c: "auth", sig64Hex: bytesToHex(signChallengeBip322(sk, pk, new TextEncoder().encode(m.nonceHex))) }));
+        ws.send(JSON.stringify({ c: "auth", sig64Hex: bytesToHex(signChallengeBip322(sk, pk, new TextEncoder().encode(loginMessage(m.nonceHex)))) }));
       } else if (m.s === "welcome") {
         ws.send(JSON.stringify({ c: "join_room", room }));
         resolve(c);
