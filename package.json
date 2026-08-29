@@ -10,7 +10,11 @@
     "typecheck": "tsc -b --noEmit ",
     "test": "tsx --test tests/*.test.ts",
     "dev:server": "npm run dev --prefix server",
-    "dev:all": "npm run dev:server & npm run dev"
+    "dev:all": "npm run dev:server & npm run dev",
+    "testnet:preflight": "server/node_modules/.bin/tsx scripts/preflight.mts",
+    "testnet:deploy": "bash scripts/deploy-and-init.sh",
+    "testnet:e2e": "server/node_modules/.bin/tsx scripts/testnet-e2e.mts",
+    "test:all": "npm test && npx tsx --test tests/multiplayer.test.mts tests/scaling.test.mts"
   },
   "dependencies": {
     "@arch-network/arch-sdk": "0.0.28",

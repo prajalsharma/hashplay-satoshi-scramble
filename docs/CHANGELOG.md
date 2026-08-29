@@ -44,3 +44,15 @@ real-wallet/real-player settlement cannot complete right now. All of it is
 scripted (scripts/deploy-and-init.sh, scripts/testnet-e2e.mts) and a
 background watcher auto-fires deploy on faucet recovery. Not faked — see
 FINAL DELIVERY REPORT "what I need to do manually".
+
+**2026-08-29 · Zero-blocker hardening (release candidate)** — Fixed the build
+typecheck (allowImportingTsExtensions for the tsx script/test files). Added
+4- and 8-player scaling tests over the real protocol (no fake players) +
+disconnect-integrity test — all pass, ~20Hz stable, ~88MB idle. Added
+scripts/preflight.mts (fail-fast connectivity/asset/program/config/funding +
+faucet-liveness probe) and testnet:preflight/deploy/e2e npm scripts. Wrote
+docs/GO_LIVE_TESTNET.md (exact funded recovery sequence). Extended
+testnet-e2e.mts guards (duplicate-join, double-settle, reclaim-after-settle).
+No gameplay/architecture changes. Faucet still down — on-chain steps remain
+BLOCKED-EXTERNAL, fully scripted.
+Test status: 4-player VERIFIED, 8-player VERIFIED (see scaling.test.mts)

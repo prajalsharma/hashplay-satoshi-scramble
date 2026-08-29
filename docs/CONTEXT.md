@@ -89,3 +89,27 @@ no per-frame world broadcasts, no on-chain movement.
 `docs/DISCOVERY.md` (evidence base) · `docs/ARCH_VERIFICATION.md` (dated
 verification table) · sibling prior art: `~/coinup` (MIT) — reference only,
 never a dependency.
+
+## Implementation status (2026-08-29, release candidate)
+
+COMPLETE (local): shared deterministic sim, Canvas renderer, 20Hz
+authoritative WS server, practice mode, ArchSigner (5 wallets), tx pipeline,
+BIP-322 sign+verify, escrow program (init/create/join/settle/reclaim, exact
+70/20/10, refund hatch), preflight/deploy/e2e scripts.
+
+VERIFIED (local, automated): sim/result/bip322 unit tests (11); Rust payout
+math (2); 2-player WS match to result-hash agreement; **4- and 8-player**
+matches over the real protocol — everyone visible, all agree on the result
+hash, stable ~20Hz (116 ticks/~6s), server idle ~88MB; disconnect mid-match
+does not corrupt or duplicate; canonical hash deterministic + tamper-evident.
+Frontend+server typecheck clean; Vite build 93KB gz; preflight fail-fasts
+correctly.
+
+IMPLEMENTED — HUMAN TEST REQUIRED: UniSat/Xverse/Phantom/Leather signing
+(Arch Wallet extension already human-verified in the sibling project).
+
+BLOCKED — EXTERNAL (testnet faucet outage): program deploy, init_config,
+on-chain E2E, real-wallet + real-player settlement. All scripted; run
+`docs/GO_LIVE_TESTNET.md` when funded. Program will deploy to
+`4cf17458cef8a3bc18bbcf052ac13ad7be5e68a99996c565bcc46a7bcc0a10d8`
+(base58 6BMXfCSXFEeYT6Zmg39uZXnDKBWZNv5cPm7aYZnBBLZV).
