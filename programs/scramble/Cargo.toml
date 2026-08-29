@@ -1,0 +1,18 @@
+[package]
+name = "scramble"
+version = "0.1.0"
+edition = "2021"
+description = "Satoshi Scramble — multi-player aBTC escrow with rank-based settlement on Arch"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+arch_program = "0.8.6"
+apl-token = { version = "0.8.6", features = ["no-entrypoint"] }
+apl-associated-token-account = { version = "0.8.6", features = ["no-entrypoint"] }
+borsh = { version = "1.5.1", features = ["derive"] }
+
+[features]
+# Host builds (tests/examples) must exclude the SBF entrypoint allocator.
+no-entrypoint = []

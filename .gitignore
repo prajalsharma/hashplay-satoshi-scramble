@@ -1,6 +1,4 @@
 node_modules/
-.next/
-out/
 dist/
 target/
 .env
@@ -11,3 +9,4 @@ target/
 *.authority.json
 *-keypair.json
 .deploy-*.json
+.settlement-key.json
