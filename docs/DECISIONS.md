@@ -52,3 +52,19 @@ histories derivable from `get_program_accounts`.
 WebSocket exists; no ARCH_API_KEY needed (all consumed endpoints keyless).
 The spec's contrary lines are superseded by live verification
 (ARCH_VERIFICATION.md).
+
+**2026-08-29 · Vite (not Next.js) for the client** — a single full-screen
+Canvas game with no SSR/routing needs; Vite is lighter and its static output
+deploys to Vercel identically. The spec's "confirm Next.js version" is moot —
+documented here instead of silently diverging.
+
+**2026-08-29 · Single key = config authority + settlement authority** for the
+initial deployment (documented in DEPLOYMENT.md). Simpler to operate for the
+MVP; production splits them (config = cold, settlement = the running server).
+The program already supports distinct keys via init_config's
+settlement_authority argument — no code change needed to split later.
+
+**2026-08-29 · Scatter remainder < 10 evaporates** — when re-materializing a
+victim's dropped carry into small/medium pickups, a sub-10 remainder is
+dropped rather than minted as an unpickable fragment. Documented in sim.ts;
+keeps loot values clean.

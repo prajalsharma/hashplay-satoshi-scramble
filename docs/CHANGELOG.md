@@ -20,3 +20,27 @@ n/a. Gameplay: rules defined on paper. Arch: program shape + trust model
 specified; economy marked "working defaults pending confirmation".
 Implementation NOT started (next gate: repo shell + renderer, spec §158
 steps 1-2).
+
+**2026-08-29 · Implementation steps 1-10 + full stack** — Built the game:
+shared deterministic SCRAMBLE_V1 sim (movement/collision/loot/scatter/bank/
+large-cache), Canvas renderer, authoritative 20Hz WS server (rooms, protocol,
+anti-cheat, canonical result + hash), practice mode (labeled, local bots),
+ArchSigner (Arch Wallet/UniSat/Xverse/Phantom/Leather) + verified tx pipeline
++ BIP-322 sign AND verify (server session auth), and the escrow program
+(init/create/join/settle/reclaim; exact integer 70/20/10; refund escape
+hatch). Tests: 15 unit/shared/result/bip322 + Rust payout math + a real
+two-player WS match to result-hash agreement — all green. Vite build 93KB gz;
+frontend + server typecheck clean. Files: src/shared/*, src/arch/*, src/game/*,
+src/App.tsx, server/src/*, programs/scramble/*, tests/*, scripts/*, docs
+(DEPLOYMENT, TESTNET), README. Gameplay: the full loop is playable now.
+Arch: program compiled + SBF-built; deploy authority pinned.
+
+**2026-08-29 · BLOCKED on program deploy — testnet faucet outage** — RPC
+(block ~12.14M, advancing) and indexer stayed healthy, but `request_airdrop`
+stopped landing funds mid-session (funded accounts fine 7-50s earlier the same
+day; then 0 lamports across many attempts over >5 min). This blocks funding
+the deploy authority, so program deploy + init_config + on-chain E2E +
+real-wallet/real-player settlement cannot complete right now. All of it is
+scripted (scripts/deploy-and-init.sh, scripts/testnet-e2e.mts) and a
+background watcher auto-fires deploy on faucet recovery. Not faked — see
+FINAL DELIVERY REPORT "what I need to do manually".
