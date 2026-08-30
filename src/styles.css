@@ -40,9 +40,9 @@ body {
 .fine { font-family: Inter, system-ui, sans-serif; }
 
 .shell {
-  max-width: 1240px;
+  max-width: min(1680px, 96vw);
   margin: 0 auto;
-  padding: 22px 18px 40px;
+  padding: 24px clamp(18px, 3vw, 48px) 48px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -61,7 +61,6 @@ body {
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
-  overflow: hidden;
 }
 .marquee::before {
   content: "";
@@ -73,9 +72,10 @@ body {
 .overlay .sub { font-size: 14px; color: var(--orange-hi); letter-spacing: 2px; }
 .brand-kicker { font-size: 9px; color: var(--dim); letter-spacing: 2px; }
 h1.title {
-  margin-top: 8px;
-  font-size: clamp(20px, 4vw, 38px);
+  margin-top: 10px;
+  font-size: clamp(24px, 4.5vw, 52px);
   line-height: 1.05;
+  white-space: nowrap;
   color: var(--cream);
   text-shadow: 0 0 14px rgba(236, 100, 29, 0.45), 3px 3px 0 var(--orange-deep);
 }
@@ -138,7 +138,7 @@ h1.title .swords { color: var(--orange); }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .spread { justify-content: space-between; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
-.grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; align-items: start; }
+.grid-2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; align-items: start; }
 @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
 
 /* ── Wallet chip ─────────────────────────────────────────────── */
@@ -178,7 +178,7 @@ h1.title .swords { color: var(--orange); }
 /* ── Arena cabinet ───────────────────────────────────────────── */
 .cabinet {
   position: relative;
-  width: fit-content; margin: 0 auto;
+  width: 100%; margin: 0 auto;
   padding: 14px;
   border: 3px solid var(--line);
   border-radius: 8px;
@@ -194,7 +194,7 @@ h1.title .swords { color: var(--orange); }
 canvas.arena {
   display: block;
   image-rendering: pixelated;
-  width: min(1040px, 92vw); height: auto;
+  width: 100%; height: auto; max-width: 1180px;
   border: 2px solid #000;
   background: #05040a;
 }
@@ -280,3 +280,11 @@ footer .foot { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
 
 /* tx status ticker */
 .tx { font-size: 9px; color: var(--gold); letter-spacing: 1px; }
+
+/* Themed prompt (replaces native window.prompt) */
+.modal .label { font-size: 10px; color: var(--cream-dim); letter-spacing: 1px; }
+.modal input.pix { margin-top: 6px; }
+.modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+
+/* Home: let the two columns breathe on tall screens */
+.home-fill { min-height: 62vh; }

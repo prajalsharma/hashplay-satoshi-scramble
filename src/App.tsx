@@ -189,6 +189,8 @@ function Home(props: {
 }) {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [serverUp, setServerUp] = useState<boolean | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameVal, setRenameVal] = useState("");
 
   useEffect(() => {
     const httpBase = GAME_WS_URL.replace(/^ws/, "http");
@@ -215,8 +217,36 @@ function Home(props: {
     <>A <b>GIANT CACHE</b> DROPS WITH 20 SECONDS LEFT. ONE MORE RUN?</>,
     <>MOST BANKED WINS. ENTRY <b>{formatAsset(ENTRY_BASE_UNITS)}</b> — TOP 3 SPLIT 70/20/10 (WINNER TAKES ALL UNDER 4). CONTROLS: <b>WASD / ARROWS</b>.</>,
   ];
+  const commitRename = () => {
+    const n = renameVal.trim().slice(0, 20).toUpperCase();
+    if (n) props.onAlias(n);
+    setRenameOpen(false);
+  };
   return (
-    <div className="grid-2">
+    <div className="grid-2 home-fill">
+      {renameOpen && (
+        <div className="modal-back" onClick={() => setRenameOpen(false)}>
+          <div className="modal stack" onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 13, color: "var(--orange)" }}>DISPLAY NAME</div>
+            <div className="label">PRACTICE NAME · MAX 20</div>
+            <input
+              className="pix"
+              autoFocus
+              maxLength={20}
+              value={renameVal}
+              onChange={(e) => setRenameVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") setRenameOpen(false);
+              }}
+            />
+            <div className="actions">
+              <button className="btn small ghost" onClick={() => setRenameOpen(false)}>CANCEL</button>
+              <button className="btn small" onClick={commitRename}>SAVE</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="panel accent stack">
         <div style={{ fontSize: 13, color: "var(--gold)" }}>HOW TO PLAY</div>
         <div className="steps">
@@ -243,10 +273,7 @@ function Home(props: {
             <button
               className="btn small ghost"
               title="Your practice display name"
-              onClick={() => {
-                const n = window.prompt("Practice name (max 20)", props.alias);
-                if (n?.trim()) props.onAlias(n.trim().slice(0, 20).toUpperCase());
-              }}
+              onClick={() => { setRenameVal(props.alias); setRenameOpen(true); }}
             >
               ✎ {props.alias}
             </button>
