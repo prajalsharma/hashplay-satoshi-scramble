@@ -28,9 +28,10 @@ const TUNING: Record<Difficulty, {
   bankAt: bigint; huntChance: number; huntRange: number;
   jitter: number; protectAt: bigint; protectRange: number;
 }> = {
-  easy:   { bankAt: 40n,  huntChance: 0.12, huntRange: 5,  jitter: 0.38, protectAt: 9999n, protectRange: 0 },
-  medium: { bankAt: 70n,  huntChance: 0.50, huntRange: 8,  jitter: 0.15, protectAt: 30n,   protectRange: 3 },
-  hard:   { bankAt: 110n, huntChance: 0.90, huntRange: 13, jitter: 0.05, protectAt: 20n,   protectRange: 4 },
+  // easy: barely hunts, banks early (leaves loot for you), lots of mistakes.
+  easy:   { bankAt: 35n,  huntChance: 0.04, huntRange: 4,  jitter: 0.50, protectAt: 9999n, protectRange: 0 },
+  medium: { bankAt: 70n,  huntChance: 0.45, huntRange: 8,  jitter: 0.16, protectAt: 32n,   protectRange: 3 },
+  hard:   { bankAt: 110n, huntChance: 0.85, huntRange: 12, jitter: 0.05, protectAt: 22n,   protectRange: 4 },
 };
 
 export class PracticeGame {
@@ -123,9 +124,10 @@ export class PracticeGame {
 
       const shouldBank = p.carrying >= t.bankAt || (timeShort && p.carrying > 0n);
       const threatened = p.carrying >= t.protectAt && nearRival < t.protectRange;
+      const distToLeader = leader ? Math.hypot(leader.x - p.x, leader.y - p.y) : Infinity;
       const canHunt =
         leader != null && leader.id !== p.id && leader.carrying >= 25n &&
-        Math.hypot(leader.x - p.x, leader.y - p.y) <= t.huntRange &&
+        distToLeader <= t.huntRange && distToLeader > 1.3 && // peel off once close — grab the scatter, don't pile up
         this.botRng.next() < t.huntChance;
 
       let tx: number, ty: number;

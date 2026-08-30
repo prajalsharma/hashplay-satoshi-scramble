@@ -461,8 +461,6 @@ function Practice(props: { alias: string; onExit: () => void }) {
   const [board, setBoard] = useState(game.leaderboard());
   const [done, setDone] = useState(false);
 
-  // Live difficulty change (also carries into the next 'RUN IT BACK').
-  useEffect(() => { gameRef.current?.setDifficulty(difficulty); }, [difficulty]);
   useEffect(() => attachInput((m) => game.setMask(m)), [game]);
   useEffect(() => {
     const t = setInterval(() => {
@@ -490,10 +488,11 @@ function Practice(props: { alias: string; onExit: () => void }) {
       <div className="row spread">
         <span className="tag warn">PRACTICE · LOCAL BOTS · NOTHING AT STAKE</span>
         <div className="row" style={{ gap: 6 }}>
-          <span className="note" style={{ fontSize: 9 }}>BOTS:</span>
+          <span className="note" style={{ fontSize: 9 }}>BOTS (RESTARTS):</span>
           {(["easy", "medium", "hard"] as Difficulty[]).map((d) => (
             <button key={d} className={`btn small ${difficulty === d ? "green" : "ghost"}`}
-              onClick={() => setDifficulty(d)} title={`${d} bots`}>
+              onClick={() => { if (d !== difficulty) { setDifficulty(d); gameRef.current = new PracticeGame(props.alias, d); setDone(false); } }}
+              title={`${d} bots — starts a fresh round`}>
               {d.toUpperCase()}
             </button>
           ))}
