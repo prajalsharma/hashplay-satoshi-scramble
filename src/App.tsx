@@ -451,6 +451,14 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
     if (!c || !net?.matchId) return;
     setJoinBusy(true);
     try {
+      // Check the wallet holds the entry before signing — a clear message
+      // beats a raw on-chain failure when the balance is short.
+      const acct = await readAccount(ataOf(props.signer.publicKey));
+      const bal = decodeTokenAmount(acct ? Uint8Array.from(acct.data) : null);
+      if (bal < ENTRY_BASE_UNITS) {
+        setTx({ phase: "failed", error: `NOT ENOUGH aBTC — ENTRY IS ${formatAsset(ENTRY_BASE_UNITS)}, THIS WALLET HAS ${formatAsset(bal)}.` });
+        return;
+      }
       await signAndSend(props.signer, [joinMatchIx(props.signer.publicKey, BigInt(net.matchId))], setTx);
       props.onBalance();
       c.ready();
