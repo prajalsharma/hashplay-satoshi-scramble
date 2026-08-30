@@ -39,6 +39,7 @@ export class Room {
   phase: RoomPhase = "waiting";
   matchId: bigint | null = null;
   matchCreated = false;
+  matchCreatedAt = 0;
   sessions = new Map<string, Session>(); // by pubkey
   joinOrder: string[] = [];
   sim: SimState | null = null;
@@ -70,6 +71,16 @@ export class Room {
       throw new Error("MATCH IN PROGRESS — WAIT FOR THE NEXT ROUND");
     }
     if (this.joinOrder.length >= MAX_PLAYERS) throw new Error("ROOM FULL");
+    // Recycle a stale match: its on-chain join_deadline (JOIN_TIMEOUT_SECS=180s)
+    // expires while a lobby waits, and joining an expired match fails with
+    // JoinDeadlinePassed (0xA). If nobody has staked yet, start a fresh match.
+    const STALE_MS = 150_000;
+    if (this.matchCreated && this.joinOrder.length === 0 &&
+        Date.now() - this.matchCreatedAt > STALE_MS) {
+      this.matchId = null;
+      this.matchCreated = false;
+      for (const s of this.sessions.values()) s.joinedOnChain = false;
+    }
     if (this.matchId === null) {
       // Unique across restarts; ties to this room cycle.
       this.matchId = BigInt(Date.now()) * 10n + BigInt(this.id.charCodeAt(this.id.length - 1) % 10);
@@ -77,6 +88,7 @@ export class Room {
     if (chainEnabled() && !this.matchCreated) {
       await createMatchOnChain(this.matchId, MAX_PLAYERS);
       this.matchCreated = true;
+      this.matchCreatedAt = Date.now();
     }
     sess.room = this;
     this.sessions.set(sess.pubkey, sess);
@@ -226,6 +238,7 @@ export class Room {
     this.phase = "waiting";
     this.matchId = null;
     this.matchCreated = false;
+    this.matchCreatedAt = 0;
     this.sim = null;
     this.joinOrder = [];
     this.lobbyStartedAt = 0;
