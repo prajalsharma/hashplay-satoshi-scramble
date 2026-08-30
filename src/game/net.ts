@@ -303,9 +303,10 @@ export class GameClient {
     if (t) this.ws?.send(enc({ c: "chat", text: t }));
   }
 
-  /** After the entry tx confirms on-chain. */
+  /** After the entry tx confirms on-chain. Stay in the SAME waiting room (the
+   *  roster now shows you STAKED ✓) — no separate post-stake screen. */
   ready(): void {
-    this.push({ phase: "lobby", error: null });
+    this.push({ error: null });
     this.ws?.send(enc({ c: "ready" }));
   }
 

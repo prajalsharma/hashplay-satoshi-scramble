@@ -193,6 +193,25 @@ test("§52 multiplayer matrix (protocol layer, independent sessions)", async (t)
       assert.equal(a.last["welcome"].playerId, a.pubkey, "same player identity restored");
       a.close();
     });
+
+    // T-lobby (LAST — pollutes its room) — set_ready presence + chat relay wire.
+    await t.test("T-lobby set_ready presence + chat relay", async () => {
+      const a = new Client("LOBA"), b = new Client("LOBB"); live.push(a, b);
+      await Promise.all([a.connect(), b.connect()]);
+      a.join("ROOM-01"); b.join("ROOM-01");
+      await wait(500);
+      a.send({ c: "set_ready", ready: true });   // green light (no stake)
+      a.send({ c: "chat", text: "gg from A" });
+      await wait(700);
+      assert.ok(!a.last["error"], `set_ready/chat must not be rejected (got ${JSON.stringify(a.last["error"])})`);
+      const rs = b.last["room_state"];
+      assert.ok(rs, "B received room_state");
+      const aRow = (rs.players as { id: string; ready: boolean }[]).find((p) => p.id === a.pubkey);
+      assert.equal(aRow?.ready, true, "A shows READY in B's room_state");
+      const chat = b.last["chat"];
+      assert.ok(chat && chat.text === "gg from A" && chat.from === a.pubkey, "B received A's chat line");
+      a.close(); b.close();
+    });
   } finally {
     for (const c of live) c.close();
     await wait(200);

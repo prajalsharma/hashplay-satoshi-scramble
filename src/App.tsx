@@ -19,7 +19,7 @@ import { readAccount } from "./arch/rpc";
 import {
   ASSET_MINT_HEX, explorerTxUrl, formatAsset, GAME_WS_URL, NETWORK_LABEL, SCRAMBLE_PROGRAM_ID_HEX,
 } from "./arch/config";
-import { ENTRY_BASE_UNITS, MATCH_SECONDS, MIN_PLAYERS, RULESET_VERSION } from "./shared/constants";
+import { ENTRY_BASE_UNITS, MATCH_SECONDS, MAX_PLAYERS, MIN_PLAYERS, RULESET_VERSION } from "./shared/constants";
 import type { RoomInfo } from "./shared/protocol";
 
 const ROSTER: WalletKind[] = ["arch", "xverse", "phantom", "unisat", "leather"];
@@ -538,16 +538,17 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
 
   // Lobby: how many more paid players are needed before the match can start.
   const paidCount = net?.lobbyPlayers.filter((p) => p.joined).length ?? 0;
-  const needMore = Math.max(0, MIN_PLAYERS - paidCount);
 
   // Waiting-room (pre-stake): ready-up + chat + payout preview.
   const selfId = props.signer.publicKeyHex;
   const selfRow = net?.lobbyPlayers.find((p) => p.id === selfId);
   const selfReady = selfRow?.ready ?? false;
   const selfStaked = selfRow?.joined ?? false;
+  const here = net?.lobbyPlayers?.length ?? 1;
   const readyCount = net?.lobbyPlayers.filter((p) => p.ready || p.joined).length ?? 0;
   const stakingUnlocked = readyCount >= MIN_PLAYERS;
-  const needReady = Math.max(0, MIN_PLAYERS - readyCount);
+  const needPlayers = Math.max(0, MIN_PLAYERS - here);          // more must JOIN
+  const notReadyHere = here - readyCount;                        // present but not ready
   const [chatInput, setChatInput] = useState("");
   const [practiceWait, setPracticeWait] = useState(false);
   const projected = Math.max(paidCount, readyCount, MIN_PLAYERS);
@@ -687,11 +688,13 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
                 ) : (
                   <>
                     <div className="note">
-                      {needReady > 0
-                        ? `WAITING FOR ${needReady} MORE HUNTER${needReady > 1 ? "S" : ""} TO READY UP (NEED ${MIN_PLAYERS}). STAKING UNLOCKS THEN.`
-                        : "READY UP ABOVE TO UNLOCK STAKING."}
+                      {needPlayers > 0
+                        ? `A MATCH NEEDS ${MIN_PLAYERS}–${MAX_PLAYERS} HUNTERS — ${here} HERE. ${selfReady ? "YOU'RE READY. " : "TAP READY ABOVE, THEN "}INVITE ANOTHER HUNTER TO JOIN:`
+                        : notReadyHere > 0
+                          ? `${readyCount}/${here} READY — WAITING FOR ${notReadyHere} MORE HERE TO READY UP. STAKING UNLOCKS AT ${MIN_PLAYERS}.`
+                          : "READY UP ABOVE TO UNLOCK STAKING."}
                     </div>
-                    {net?.room && (
+                    {net?.room && needPlayers > 0 && (
                       <button className="btn small" onClick={() => copyInvite(net.room!)}>
                         {copied === net.room ? "INVITE COPIED ✓" : `⧉ INVITE A FRIEND · ${net.room}`}
                       </button>
@@ -704,8 +707,20 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
               </>
             )}
             {selfStaked && (
-              <div className="note" style={{ color: "var(--green)" }}>
-                STAKED ✓ — WAITING FOR THE MATCH TO START ({paidCount} STAKED, NEED {MIN_PLAYERS}+). IT BEGINS WHEN {MIN_PLAYERS}+ HAVE STAKED OR THE ROOM FILLS.
+              <div className="stack" style={{ gap: 6 }}>
+                <div className="note" style={{ color: "var(--green)" }}>
+                  STAKED ✓ — {paidCount >= MIN_PLAYERS
+                    ? "MATCH STARTING…"
+                    : `WAITING FOR ${MIN_PLAYERS - paidCount} MORE HUNTER TO STAKE.`}
+                </div>
+                {paidCount < MIN_PLAYERS && net?.room && (
+                  <button className="btn small" onClick={() => copyInvite(net.room!)}>
+                    {copied === net.room ? "INVITE COPIED ✓" : `⧉ INVITE A FRIEND · ${net.room}`}
+                  </button>
+                )}
+                {paidCount < MIN_PLAYERS && (
+                  <div className="note" style={{ fontSize: 9 }}>NO SECOND PLAYER? YOUR STAKE IS SAFE — RECLAIM ON-CHAIN AFTER THE DEADLINE.</div>
+                )}
               </div>
             )}
           </div>
@@ -713,14 +728,14 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
           {/* RIGHT — payout preview + room chat */}
           <div className="stack">
             <div className="panel accent stack">
-              <span style={{ fontSize: 12, color: "var(--orange)" }}>STAKE {formatAsset(ENTRY_BASE_UNITS)} · WINNER TAKES</span>
+              <span style={{ fontSize: 12, color: "var(--orange)" }}>STAKE {formatAsset(ENTRY_BASE_UNITS)} PER HUNTER · {MIN_PLAYERS}–{MAX_PLAYERS} PLAYERS</span>
               <div className="note">GRAB LOOT, RUN IT TO THE BANK — MOST BANKED IN {MATCH_SECONDS}s WINS. 0% FEE.</div>
               <div className="note">
                 <b>2–3 HUNTERS:</b> WINNER TAKES THE WHOLE POT.<br />
                 <b>4–8 HUNTERS:</b> TOP 3 SPLIT <b>70 / 20 / 10</b>.
               </div>
               <div className="note" style={{ color: "var(--gold)", fontSize: 11 }}>
-                WITH {projected} HUNTERS → POT {formatAsset(projPot)} · WINNER TAKES {formatAsset(projWinner)}{projected >= 4 ? " (1ST)" : ""}.
+                IF {projected} HUNTERS PLAY → POT {formatAsset(projPot)} · WINNER TAKES {formatAsset(projWinner)}{projected >= 4 ? " (1ST OF 3)" : ""}.
               </div>
               <div className="note" style={{ fontSize: 9 }}>NEVER FILLS OR SETTLES? RECLAIM YOUR STAKE ON-CHAIN. TESTNET · NO REAL VALUE.</div>
             </div>
@@ -751,31 +766,6 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
             <span style={{ fontSize: 11, color: "var(--gold)" }}>PRACTICE — VS BOTS, NOTHING STAKED (THE MATCH STARTS AUTOMATICALLY WHEN IT'S READY)</span>
           </div>
           <Practice alias={props.alias} onExit={() => setPracticeWait(false)} />
-        </div>
-      )}
-
-      {phase === "lobby" && (
-        <div className="panel stack">
-          <span style={{ fontSize: 11, color: "var(--orange)" }}>
-            {needMore > 0
-              ? `WAITING FOR ${needMore} MORE HUNTER${needMore > 1 ? "S" : ""} TO START…`
-              : "READY — MATCH STARTING…"}
-          </span>
-          {net?.lobbyPlayers.map((p) => (
-            <div key={p.id} className="note">
-              {p.alias.toUpperCase()} {p.joined ? "· STAKE PAID ✓" : "· STAKING…"}
-            </div>
-          ))}
-          {needMore > 0 && net?.room && (
-            <>
-              <div className="note">YOU'RE IN AND STAKED. NEED {needMore} MORE — SEND THIS LINK TO A FRIEND SO THEY LAND IN {net.room}:</div>
-              <button className="btn small" onClick={() => copyInvite(net.room!)}>
-                {copied === net.room ? "INVITE LINK COPIED ✓" : `⧉ COPY INVITE LINK · ${net.room}`}
-              </button>
-              <div className="note" style={{ fontSize: 9 }}>NO SECOND PLAYER? YOUR STAKE IS SAFE — RECLAIM IT ON-CHAIN AFTER THE DEADLINE. OR TRY PRACTICE MODE (NO WALLET, PLAY VS BOTS).</div>
-            </>
-          )}
-          <div className="note">MATCH STARTS WHEN {MIN_PLAYERS}+ HUNTERS HAVE STAKED (OR THE ROOM FILLS TO 8).</div>
         </div>
       )}
 
