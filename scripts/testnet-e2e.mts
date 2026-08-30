@@ -12,7 +12,7 @@
 
 import { readFileSync } from "node:fs";
 import { schnorr } from "@noble/curves/secp256k1.js";
-import { bytesToHex, concatBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import { localSigner, type ArchSigner } from "../src/arch/signer.ts";
 import { ensureGas, readAccount } from "../src/arch/rpc.ts";
 import { signAndSend } from "../src/arch/txSend.ts";
@@ -144,11 +144,29 @@ async function run(): Promise<void> {
   const winners = rankings.slice(0, 3).map((idx) => players[idx]!.publicKeyHex);
   await signAndSend(settlement, [settleMatchIx(settlement.publicKey, matchId, hash, rankings, winners)]);
 
+  // Settlement transfers can lag across RPC read replicas; reading balances
+  // immediately after settle returns stale values (flaky, looked like a bug).
+  // Wait for the vault to reflect 0 (all transfers propagated), then read.
+  for (let i = 0; i < 25 && (await tokenBal(mp)) !== 0n; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  await new Promise((r) => setTimeout(r, 2000));
   const after = await Promise.all(players.map((p) => tokenBal(p.publicKey)));
   const pot = ENTRY_BASE_UNITS * 4n; // 40,000
   const expect = [pot * 70n / 100n, pot * 20n / 100n, pot - (pot * 70n / 100n) - (pot * 20n / 100n)];
   const gain = (i: number) => after[i]! - before[i]!;
   log(`payouts — P2(#1): +${gain(2)} P0(#2): +${gain(0)} P3(#3): +${gain(3)} P1(#4): +${gain(1)}`);
+  log(`DEBUG vault after settle: ${await tokenBal(mp)} (0 = fully paid; 4000 = rank3 stranded) · expected split [${expect.join(", ")}]`);
+  {
+    const mNow = decodeMatch(Uint8Array.from((await readAccount(mp))!.data))!;
+    const eOrder = players.map((p) => p.publicKeyHex);
+    log(`DEBUG on-chain m.players order matches e2e join order: ${JSON.stringify(mNow.players.slice(0, 4)) === JSON.stringify(eOrder)}`);
+    for (let k = 0; k < 3; k++) {
+      const winnerHex = mNow.players[rankings[k]!]!;
+      const bal = await tokenBal(hexToBytes(winnerHex));
+      log(`DEBUG rank${k + 1} winner=${winnerHex.slice(0, 8)} balance=${bal} (expected 50000 - 10000 + ${expect[k]} = ${50000n - 10000n + expect[k]!})`);
+    }
+  }
   if (gain(2) !== expect[0]) throw new Error(`rank1 payout ${gain(2)} != ${expect[0]}`);
   if (gain(0) !== expect[1]) throw new Error(`rank2 payout ${gain(0)} != ${expect[1]}`);
   if (gain(3) !== expect[2]) throw new Error(`rank3 payout ${gain(3)} != ${expect[2]}`);
