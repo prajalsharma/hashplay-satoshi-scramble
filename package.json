@@ -14,7 +14,8 @@
     "testnet:preflight": "server/node_modules/.bin/tsx scripts/preflight.mts",
     "testnet:deploy": "bash scripts/deploy-and-init.sh",
     "testnet:e2e": "server/node_modules/.bin/tsx scripts/testnet-e2e.mts",
-    "test:all": "npm test && npx tsx --test tests/multiplayer.test.mts tests/scaling.test.mts"
+    "test:all": "npm test && npx tsx --test tests/multiplayer.test.mts tests/scaling.test.mts",
+    "testnet:init": "server/node_modules/.bin/tsx scripts/init-config.mts"
   },
   "dependencies": {
     "@arch-network/arch-sdk": "0.0.28",
