@@ -49,6 +49,7 @@ export class Room {
   private startTs = 0;
   private settling = false;
   lastSettlement: { state: string; txid?: string; hash?: string } | null = null;
+  private lastMatchEnd: ServerMsg | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -211,11 +212,12 @@ export class Room {
     };
     const { resultHash } = await import("../../src/shared/result");
     const hash = resultHash(result);
-    this.broadcast({
+    this.lastMatchEnd = {
       s: "match_end",
       rankings: ranked.map((r) => ({ id: r.id, alias: r.alias, banked: r.banked.toString(), rank: r.rank })),
       resultHash: hash,
-    });
+    };
+    this.broadcast(this.lastMatchEnd);
 
     if (chainEnabled() && !this.settling) {
       this.settling = true;
@@ -245,6 +247,8 @@ export class Room {
     this.joinOrder = [];
     this.lobbyStartedAt = 0;
     this.settling = false;
+    this.lastMatchEnd = null;
+    this.lastSettlement = null;
     this.tick = 0;
     for (const s of this.sessions.values()) {
       s.joinedOnChain = false;
@@ -286,6 +290,9 @@ export class Room {
     const p = this.sim?.players.get(sess.pubkey);
     if (p) p.connected = true;
     this.sendSnapshotTo(sess);
+    // A player who dropped right before the finish still gets the final result
+    // and settlement on reconnect (until the room recycles).
+    if (this.lastMatchEnd) this.sendTo(sess, this.lastMatchEnd);
     if (this.lastSettlement) {
       this.sendTo(sess, { s: "settlement", state: this.lastSettlement.state as never, txid: this.lastSettlement.txid });
     }

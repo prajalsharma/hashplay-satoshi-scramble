@@ -580,7 +580,12 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
             {net.settlement.state === "failed" && "SETTLEMENT FAILED — ENTRIES RECLAIMABLE AFTER THE DEADLINE"}
           </div>
         )}
-        <button className="btn" onClick={props.onExit}>BACK TO ROOMS</button>
+        {net.hashVerified === true && <div className="ok" style={{ fontSize: 10 }}>RESULT VERIFIED ON-CHAIN ✓</div>}
+        {net.hashVerified === false && <div className="err" style={{ fontSize: 10 }}>⚠ RESULT DOES NOT MATCH ON-CHAIN RECORD</div>}
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn" onClick={() => c?.leaveToRooms()}>PLAY AGAIN</button>
+          <button className="btn ghost" onClick={props.onExit}>BACK TO ROOMS</button>
+        </div>
       </div>
     ) : undefined;
 

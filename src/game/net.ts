@@ -6,6 +6,8 @@
 
 import { GAME_WS_URL } from "../arch/config";
 import type { ArchSigner } from "../arch/signer";
+import { readAccount } from "../arch/rpc";
+import { decodeMatch, matchPda } from "../arch/program";
 import { enc, loginMessage, type RoomInfo, type ServerMsg } from "../shared/protocol";
 import { integrateMovement } from "../shared/sim";
 import type { View, ViewLoot, ViewPlayer } from "./renderer";
@@ -24,6 +26,7 @@ export type NetState = {
   leaderboard: { id: string; alias: string; banked: string; rank: number }[];
   rankings: { id: string; alias: string; banked: string; rank: number }[] | null;
   resultHash: string | null;
+  hashVerified: boolean | null; // true = displayed result matches on-chain result_hash
   settlement: { state: string; txid?: string } | null;
   error: string | null;
   latencyMs: number | null;
@@ -51,7 +54,7 @@ export class GameClient {
 
   state: NetState = {
     phase: "connecting", rooms: [], room: null, matchId: null, matchPdaHex: null,
-    lobbyPlayers: [], leaderboard: [], rankings: null, resultHash: null,
+    lobbyPlayers: [], leaderboard: [], rankings: null, resultHash: null, hashVerified: null,
     settlement: null, error: null, latencyMs: null, tick: 0,
   };
 
@@ -87,6 +90,28 @@ export class GameClient {
     this.stopped = true;
     if (this.pingTimer) clearInterval(this.pingTimer);
     try { this.ws?.close(); } catch { /* ignore */ }
+  }
+
+  /** PLAY AGAIN: drop back to the room picker, keeping the connection + session
+   *  (no wallet re-sign). The old room recycles server-side on its own. */
+  leaveToRooms(): void {
+    this.push({
+      phase: "rooms", room: null, matchId: null, matchPdaHex: null,
+      rankings: null, resultHash: null, hashVerified: null, settlement: null, lobbyPlayers: [],
+    });
+  }
+
+  /** Confirm the displayed result matches the AUTHORITATIVE on-chain result_hash
+   *  (settle_match stores it) — the chain's record, not the server's word. */
+  private async verifyOnChain(): Promise<void> {
+    const id = this.state.matchId;
+    const shown = this.state.resultHash;
+    if (!id || !shown) return;
+    try {
+      const acct = await readAccount(matchPda(BigInt(id)));
+      const dm = acct ? decodeMatch(Uint8Array.from(acct.data)) : null;
+      if (dm) this.push({ hashVerified: dm.resultHashHex === shown });
+    } catch { /* leave null — verification simply unavailable */ }
   }
 
   /**
@@ -171,7 +196,7 @@ export class GameClient {
         this.push({ room: m.room, matchId: m.matchId, matchPdaHex: m.matchPda || null, phase: "joining" });
         return;
       case "match_start":
-        this.push({ phase: "countdown", rankings: null, settlement: null, resultHash: null });
+        this.push({ phase: "countdown", rankings: null, settlement: null, resultHash: null, hashVerified: null });
         return;
       case "snapshot": {
         this.simPhase = m.phase;
@@ -247,6 +272,9 @@ export class GameClient {
         return;
       case "settlement":
         this.push({ settlement: { state: m.state, txid: m.txid } });
+        // Independently verify the displayed result against the authoritative
+        // on-chain result_hash — not the server's word, the chain's record.
+        if (m.state === "confirmed") void this.verifyOnChain();
         return;
       case "pong":
         this.push({ latencyMs: Date.now() - m.t });

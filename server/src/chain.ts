@@ -80,6 +80,7 @@ export async function readMatch(matchId: bigint): Promise<OnChainMatch | null> {
 
 export async function settleOnChain(result: CanonicalResult): Promise<{ txid: string; hash: string }> {
   const s = serverSigner();
+  await ensureGas(s.publicKey, 300_000); // never fail settlement for lack of native balance
   const hash = resultHash(result);
   console.log(
     `[chain] settling match ${result.matchId}: hash=${hash.slice(0, 16)}… bytes=${encodeResult(result).length}`,
