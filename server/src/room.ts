@@ -72,8 +72,8 @@ export class Room {
     }
     if (this.joinOrder.length >= MAX_PLAYERS) throw new Error("ROOM FULL");
     // Recycle a stale match: its on-chain join_deadline (JOIN_TIMEOUT_SECS=180s)
-    // expires while a lobby waits, and joining an expired match fails with
-    // JoinDeadlinePassed (0xA). If nobody has staked yet, start a fresh match.
+    // expires while a lobby waits; joining an expired match fails with 0xA. If
+    // nobody has staked yet, drop it so a fresh match (fresh window) is created.
     const STALE_MS = 150_000;
     if (this.matchCreated && this.joinOrder.length === 0 &&
         Date.now() - this.matchCreatedAt > STALE_MS) {
@@ -82,7 +82,6 @@ export class Room {
       for (const s of this.sessions.values()) s.joinedOnChain = false;
     }
     if (this.matchId === null) {
-      // Unique across restarts; ties to this room cycle.
       this.matchId = BigInt(Date.now()) * 10n + BigInt(this.id.charCodeAt(this.id.length - 1) % 10);
     }
     if (chainEnabled() && !this.matchCreated) {
@@ -94,6 +93,9 @@ export class Room {
     this.sessions.set(sess.pubkey, sess);
     this.phase = this.phase === "waiting" ? "lobby" : this.phase;
     if (this.lobbyStartedAt === 0) this.lobbyStartedAt = Date.now();
+    // Broadcast so every room member syncs the current matchId (it changes when
+    // a stale match is recycled) — clients stake against the latest one.
+    this.broadcastRoomState();
     return {
       matchId: this.matchId.toString(),
       matchPdaHex: chainEnabled() ? bytesToHex(matchPda(this.matchId)) : "",

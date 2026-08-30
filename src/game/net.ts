@@ -159,7 +159,13 @@ export class GameClient {
         this.push({ rooms: m.rooms, phase: this.state.phase === "authing" ? "rooms" : this.state.phase });
         return;
       case "room_state":
-        this.push({ lobbyPlayers: m.players, rooms: this.state.rooms.map((r) => (r.room === m.room.room ? m.room : r)) });
+        this.push({
+          lobbyPlayers: m.players,
+          // Sync the current matchId (it changes when a stale match is recycled)
+          // so we always stake against the live one.
+          matchId: m.room.matchId ?? this.state.matchId,
+          rooms: this.state.rooms.map((r) => (r.room === m.room.room ? m.room : r)),
+        });
         return;
       case "join_ok":
         this.push({ room: m.room, matchId: m.matchId, matchPdaHex: m.matchPda || null, phase: "joining" });

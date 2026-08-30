@@ -612,9 +612,25 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
         </div>
       )}
 
-      {phase === "joining" && (
+      {phase === "joining" && (net?.lobbyPlayers?.length ?? 1) < MIN_PLAYERS && (
+        <div className="panel accent stack">
+          <span style={{ fontSize: 12, color: "var(--orange)" }}>YOU'RE THE ONLY HUNTER IN {net?.room ?? "THIS ROOM"}</span>
+          <div className="note">
+            A MATCH NEEDS {MIN_PLAYERS}+ HUNTERS — YOU CAN'T STAKE OR PLAY SOLO. DON'T PAY YET.
+            SHARE THIS ROOM'S INVITE LINK; WHEN ANOTHER HUNTER JOINS, STAKING UNLOCKS FOR BOTH OF YOU.
+          </div>
+          {net?.room && (
+            <button className="btn" onClick={() => copyInvite(net.room!)}>
+              {copied === net.room ? "INVITE LINK COPIED ✓" : `⧉ COPY INVITE LINK · ${net.room}`}
+            </button>
+          )}
+          <div className="note" style={{ fontSize: 9 }}>NO ONE TO PLAY WITH? TRY PRACTICE MODE (NO WALLET, VS BOTS). NOTHING IS STAKED HERE — YOUR aBTC IS UNTOUCHED.</div>
+        </div>
+      )}
+
+      {phase === "joining" && (net?.lobbyPlayers?.length ?? 1) >= MIN_PLAYERS && (
         <div className="panel stack">
-          <span style={{ fontSize: 11 }}>JOIN {net?.room ?? "ROOM"} · STAKE {formatAsset(ENTRY_BASE_UNITS)}</span>
+          <span style={{ fontSize: 11 }}>JOIN {net?.room ?? "ROOM"} · STAKE {formatAsset(ENTRY_BASE_UNITS)} · {net?.lobbyPlayers?.length ?? 2} HUNTERS HERE</span>
           <div className="steps">
             <div className="step"><span className="n">1</span><span className="t">YOU STAKE <b>{formatAsset(ENTRY_BASE_UNITS)}</b> INTO THIS ROOM'S ON-CHAIN VAULT.</span></div>
             <div className="step"><span className="n">2</span><span className="t">MATCH STARTS ONCE <b>{MIN_PLAYERS}+ HUNTERS</b> HAVE STAKED (OR THE ROOM FILLS).</span></div>
