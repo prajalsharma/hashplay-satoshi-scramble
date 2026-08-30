@@ -173,22 +173,70 @@ const hexSigTo64 = (sigHex: string): Uint8Array => {
 // ---------------------------------------------------------------------------
 
 /**
- * The Arch Wallet routes connect/sign through a hosted popup (hub.arch.network)
- * that can hang without ever resolving. Bound every await so a stuck popup
- * surfaces a clear, retryable error on our side instead of an infinite spinner.
- * (We can't close their window, but we stop waiting on it.)
+ * The Arch Wallet's own RPC channel manages its timeouts (~120s + one retry),
+ * and — for a linked external-wallet account — its "Arch Wallet · Connect"
+ * relay popup is a script-less window the extension closes itself (via its
+ * CLOSE_EXTERNAL_CONNECTOR message or a 90s idle timer). The dApp cannot close
+ * it and must NOT abandon the call early: a short timeout just leaves the
+ * extension mid-flow with the popup still up. So this is only a long safety net.
  */
-const WALLET_TIMEOUT_MS = 45_000;
+const WALLET_TIMEOUT_MS = 180_000;
 function withTimeout<T>(p: Promise<T>, label: string, ms = WALLET_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) =>
       setTimeout(
-        () => reject(new Error(`${label} timed out — the wallet didn't respond. Close its popup and try again, or connect with UniSat/Xverse.`)),
+        () => reject(new Error(`${label} didn't complete. If the Arch Wallet window is still open, approve in your external wallet (UniSat/Xverse) — or connect with UniSat directly, which skips that window.`)),
         ms,
       ),
     ),
   ]);
+}
+
+// One connect at a time — a second click must reuse the in-flight call, never
+// open a second wallet flow.
+let archConnectInFlight: Promise<any> | null = null;
+
+/** Build the ArchSigner from a connected account (shared by connect + restore). */
+function archSignerFrom(p: any, acct: any): ArchSigner {
+  const archAddress: string = acct?.archAddress ?? "";
+  if (!archAddress) throw new Error("Arch Wallet returned no Arch address");
+  const pubkeyHex = base58To32(archAddress);
+  return {
+    kind: "arch",
+    label: `ARCH WALLET ${archAddress.slice(0, 5)}…${archAddress.slice(-4)}`,
+    address: acct?.address,
+    publicKey: hexToBytes32(pubkeyHex),
+    publicKeyHex: pubkeyHex,
+    sign: async (challenge) => {
+      const raw = hexToBytes32(challengeToHexString(challenge));
+      const res = await withTimeout<any>(p.signArchMessageHash(raw), "Arch Wallet signing");
+      return hexSigTo64(String(res?.signature64Hex ?? ""));
+    },
+    signLogin: async (msg) => {
+      // Message signing (readable) — NOT signArchMessageHash. Cannot be a tx.
+      const res = await withTimeout<any>(p.signMessage(new TextEncoder().encode(msg)), "Arch Wallet sign-in");
+      return extractSchnorr(anySigToBytes(res?.signature ?? res));
+    },
+  };
+}
+
+/**
+ * Silent restore: if this origin is already connected to the Arch Wallet,
+ * rebuild the signer WITHOUT opening any popup (getAccount never opens the
+ * connector window). Returns null if not connected. Call on page load so a
+ * reload never re-triggers the wallet's connect popup.
+ */
+export async function silentArch(): Promise<ArchSigner | null> {
+  const p = archProvider();
+  if (!p?.getAccount) return null;
+  try {
+    const acct = await p.getAccount();
+    if (!acct?.archAddress) return null;
+    return archSignerFrom(p, acct);
+  } catch {
+    return null;
+  }
 }
 
 export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
@@ -197,27 +245,21 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
   if (kind === "arch") {
     const p = archProvider();
     if (!p) throw new Error("Arch Wallet extension not found");
-    const acct = await withTimeout<any>(p.connect(), "Arch Wallet connect");
-    const archAddress: string = acct?.archAddress ?? "";
-    if (!archAddress) throw new Error("Arch Wallet returned no Arch address");
-    const pubkeyHex = base58To32(archAddress);
-    return {
-      kind: "arch",
-      label: `ARCH WALLET ${archAddress.slice(0, 5)}…${archAddress.slice(-4)}`,
-      address: acct?.address,
-      publicKey: hexToBytes32(pubkeyHex),
-      publicKeyHex: pubkeyHex,
-      sign: async (challenge) => {
-        const raw = hexToBytes32(challengeToHexString(challenge));
-        const res = await withTimeout<any>(p.signArchMessageHash(raw), "Arch Wallet signing");
-        return hexSigTo64(String(res?.signature64Hex ?? ""));
-      },
-      signLogin: async (msg) => {
-        // Message signing (readable) — NOT signArchMessageHash. Cannot be a tx.
-        const res = await withTimeout<any>(p.signMessage(new TextEncoder().encode(msg)), "Arch Wallet sign-in");
-        return extractSchnorr(anySigToBytes(res?.signature ?? res));
-      },
-    };
+    // Silent pre-check: getAccount() returns an already-connected account WITHOUT
+    // opening any popup (connection is per-origin and consent-gated). Only fall
+    // back to connect() — which opens the wallet's approval/relay UI — when this
+    // origin isn't connected yet. This keeps the connector popup from reappearing
+    // on every reconnect.
+    let acct: any = null;
+    try { acct = await p.getAccount?.(); } catch { /* origin not connected yet */ }
+    if (!acct?.archAddress) {
+      if (!archConnectInFlight) {
+        archConnectInFlight = withTimeout<any>(p.connect(), "Arch Wallet connect")
+          .finally(() => { archConnectInFlight = null; });
+      }
+      acct = await archConnectInFlight;
+    }
+    return archSignerFrom(p, acct);
   }
 
   if (kind === "unisat") {

@@ -10,7 +10,7 @@ import { attachInput } from "./game/input";
 import { PracticeGame, PRACTICE_SELF } from "./game/practice";
 import { GameClient, type NetState } from "./game/net";
 import {
-  connectWallet, detectWallets, disconnectWallet,
+  connectWallet, detectWallets, disconnectWallet, silentArch,
   WALLET_LABELS, type ArchSigner, type WalletKind,
 } from "./arch/signer";
 import { signAndSend, type TxProgress } from "./arch/txSend";
@@ -78,6 +78,17 @@ export function App() {
     setWallets(detectWallets());
     const timers = [400, 1200, 3000].map((ms) => setTimeout(() => setWallets(detectWallets()), ms));
     return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Silent restore: if already connected to the Arch Wallet, rebuild the signer
+  // WITHOUT opening any popup — so a reload never re-triggers its connect window.
+  useEffect(() => {
+    let cancelled = false;
+    const restore = () => { if (!signer) void silentArch().then((s) => { if (s && !cancelled) setSigner(s); }); };
+    restore();
+    const timers = [600, 1800].map((ms) => setTimeout(restore, ms)); // extension injects late
+    return () => { cancelled = true; timers.forEach(clearTimeout); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshBalance = useCallback(async () => {
@@ -164,12 +175,15 @@ export function App() {
                   onClick={() => on && void doConnect(k)}
                   title={on ? `Connect ${WALLET_LABELS[k]}` : `Install ${WALLET_LABELS[k]} to connect`}
                 >
-                  <span>{k === "arch" ? "△ " : ""}{WALLET_LABELS[k].toUpperCase()}</span>
+                  <span>{k === "arch" ? "△ " : ""}{WALLET_LABELS[k].toUpperCase()}{k === "unisat" ? " · SMOOTHEST" : ""}</span>
                   <span className={`st ${on ? "on" : ""}`}>{on ? "INSTALLED" : "NOT DETECTED"}</span>
                 </div>
               );
             })}
             <div className="note">
+              TIP: <b>UNISAT / XVERSE</b> SIGN INLINE — ONE POPUP, NOTHING TO CLOSE. THE ARCH WALLET,
+              WHEN LINKED TO AN EXTERNAL WALLET, OPENS AN "ARCH WALLET · CONNECT" RELAY WINDOW THAT ITS
+              EXTENSION CLOSES ON ITS OWN (APPROVE IN YOUR EXTERNAL WALLET; IT AUTO-CLOSES, ~90S WORST CASE).
               WALLETS SIGN WITH A TAPROOT (P2TR) ADDRESS. NO WALLET? PRACTICE MODE NEEDS NONE.
             </div>
           </div>

@@ -27,3 +27,23 @@ Session auth signs a READABLE login message (SIWE-style), NEVER a raw hash — a
 Test log (to be appended as each human test happens): 2026-08-28 — Arch
 Wallet on Brave/macOS, testnet, official aUSD: connect ✓ sign ✓ submit ✓
 escrow ✓ (sibling project, user-executed).
+
+## The "Arch Wallet · Connect" relay popup (verified from wallet source 2026-08-30)
+
+This window is the Arch Wallet **extension's external-wallet bridge** popup — a
+script-less HTML page (`wallet-hub-api /v1/extension/connect`) opened/closed
+ONLY by the extension's background worker. **The dApp cannot close it** — no
+handshake, ack, or promise. It appears ONLY when the connected Arch Wallet
+account is a **linked external wallet (UniSat/Xverse)** and the extension relays
+to it; a Turnkey/passkey/email account signs in-extension and never opens it. It
+closes via the extension's `CLOSE_EXTERNAL_CONNECTOR` message (sent only from the
+extension's Onboarding flow) or a **90s idle timer**; the extension's dApp-sign
+path never sends that message, so it can linger up to ~90s (extension bug, not
+ours). Provider API (`window.arch` / `window.bitcoinArch`): promise-based
+`connect()` → `{address, publicKey, archAddress}`, and **`getAccount()` returns
+an already-connected account WITHOUT opening any popup** (per-origin, consent-
+gated). dApp mitigations we ship: `getAccount()` pre-check before `connect()`,
+`silentArch()` restore on load (no popup on reload), single-connect in-flight
+guard, a long (180s) safety-net timeout (never abandon early), and steering users
+to **UniSat/Xverse (inline signing, no relay popup)** — the definitive escape
+since a linked account is the same key/account anyway.
