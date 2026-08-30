@@ -104,7 +104,7 @@ wss.on("connection", (ws: WebSocket, req) => {
         const session: Session = {
           ws, pubkey: state.pendingPubkey, alias: state.pendingAlias,
           resumeToken: newTokenHex(), room: null, joinedOnChain: false,
-          inputTimestamps: [], disconnectedAt: null,
+          readyToStake: false, inputTimestamps: [], disconnectedAt: null, chatTimestamps: [],
         };
         state.session = session;
         sessionsByToken.set(session.resumeToken, session);
@@ -160,6 +160,16 @@ wss.on("connection", (ws: WebSocket, req) => {
         void room
           .confirmReady(session)
           .catch((e: Error) => send(ws, { s: "error", code: "ready", message: e.message }));
+        return;
+      }
+      case "set_ready": {
+        if (!session.room) { send(ws, { s: "error", code: "no_room", message: "join a room first" }); return; }
+        session.room.setReady(session, msg.ready);
+        return;
+      }
+      case "chat": {
+        if (!session.room) return;
+        session.room.relayChat(session, msg.text);
         return;
       }
       case "input": {

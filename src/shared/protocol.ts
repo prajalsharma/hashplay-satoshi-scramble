@@ -25,6 +25,8 @@ export type ClientMsg =
   | { c: "hello"; pubkey: string; alias: string }
   | { c: "auth"; sig64Hex: string } // signs the server's nonce (BIP-322)
   | { c: "join_room"; room: string }
+  | { c: "set_ready"; ready: boolean } // pre-stake "I'm in" green light
+  | { c: "chat"; text: string }
   | { c: "ready" }
   | { c: "input"; seq: number; mask: number }
   | { c: "ping"; t: number }
@@ -44,6 +46,12 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return /^[0-9a-f]{128}$/.test(String(o.sig64Hex)) ? { c: "auth", sig64Hex: String(o.sig64Hex) } : null;
     case "join_room":
       return /^[A-Z0-9-]{1,16}$/.test(String(o.room)) ? { c: "join_room", room: String(o.room) } : null;
+    case "set_ready":
+      return { c: "set_ready", ready: Boolean(o.ready) };
+    case "chat": {
+      const text = String(o.text ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+      return text ? { c: "chat", text } : null;
+    }
     case "ready":
       return { c: "ready" };
     case "input": {
@@ -82,7 +90,8 @@ export type ServerMsg =
   | { s: "challenge"; nonceHex: string; protocol: number }
   | { s: "welcome"; playerId: string; resumeToken: string }
   | { s: "rooms"; rooms: RoomInfo[] }
-  | { s: "room_state"; room: RoomInfo; players: { id: string; alias: string; joined: boolean }[] }
+  | { s: "room_state"; room: RoomInfo; players: { id: string; alias: string; joined: boolean; ready: boolean }[] }
+  | { s: "chat"; from: string; alias: string; text: string; ts: number }
   | { s: "join_ok"; room: string; matchId: string; matchPda: string }
   | { s: "snapshot"; phase: MatchPhase; timeLeft: number; players: PlayerSnap[]; loot: LootSnap[]; tick: number }
   | { s: "tick"; tick: number; timeLeft: number; moved: [string, number, number, number, number][]; events: unknown[] }

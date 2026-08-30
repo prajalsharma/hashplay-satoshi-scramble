@@ -22,7 +22,8 @@ export type NetState = {
   room: string | null;
   matchId: string | null;
   matchPdaHex: string | null;
-  lobbyPlayers: { id: string; alias: string; joined: boolean }[];
+  lobbyPlayers: { id: string; alias: string; joined: boolean; ready: boolean }[];
+  chat: { from: string; alias: string; text: string; ts: number }[];
   leaderboard: { id: string; alias: string; banked: string; rank: number }[];
   rankings: { id: string; alias: string; banked: string; rank: number }[] | null;
   resultHash: string | null;
@@ -54,7 +55,7 @@ export class GameClient {
 
   state: NetState = {
     phase: "connecting", rooms: [], room: null, matchId: null, matchPdaHex: null,
-    lobbyPlayers: [], leaderboard: [], rankings: null, resultHash: null, hashVerified: null,
+    lobbyPlayers: [], chat: [], leaderboard: [], rankings: null, resultHash: null, hashVerified: null,
     settlement: null, error: null, latencyMs: null, tick: 0,
   };
 
@@ -195,6 +196,9 @@ export class GameClient {
       case "join_ok":
         this.push({ room: m.room, matchId: m.matchId, matchPdaHex: m.matchPda || null, phase: "joining" });
         return;
+      case "chat":
+        this.push({ chat: [...this.state.chat, { from: m.from, alias: m.alias, text: m.text, ts: m.ts }].slice(-40) });
+        return;
       case "match_start":
         this.push({ phase: "countdown", rankings: null, settlement: null, resultHash: null, hashVerified: null });
         return;
@@ -287,6 +291,16 @@ export class GameClient {
 
   joinRoom(room: string): void {
     this.ws?.send(enc({ c: "join_room", room }));
+  }
+
+  /** Pre-stake green light — staking unlocks once MIN_PLAYERS are ready. */
+  setReady(ready: boolean): void {
+    this.ws?.send(enc({ c: "set_ready", ready }));
+  }
+
+  sendChat(text: string): void {
+    const t = text.replace(/\s+/g, " ").trim().slice(0, 160);
+    if (t) this.ws?.send(enc({ c: "chat", text: t }));
   }
 
   /** After the entry tx confirms on-chain. */

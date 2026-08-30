@@ -540,6 +540,20 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
   const paidCount = net?.lobbyPlayers.filter((p) => p.joined).length ?? 0;
   const needMore = Math.max(0, MIN_PLAYERS - paidCount);
 
+  // Waiting-room (pre-stake): ready-up + chat + payout preview.
+  const selfId = props.signer.publicKeyHex;
+  const selfRow = net?.lobbyPlayers.find((p) => p.id === selfId);
+  const selfReady = selfRow?.ready ?? false;
+  const selfStaked = selfRow?.joined ?? false;
+  const readyCount = net?.lobbyPlayers.filter((p) => p.ready || p.joined).length ?? 0;
+  const stakingUnlocked = readyCount >= MIN_PLAYERS;
+  const needReady = Math.max(0, MIN_PLAYERS - readyCount);
+  const [chatInput, setChatInput] = useState("");
+  const [practiceWait, setPracticeWait] = useState(false);
+  const projected = Math.max(paidCount, readyCount, MIN_PLAYERS);
+  const projPot = ENTRY_BASE_UNITS * BigInt(projected);
+  const projWinner = projected < 4 ? projPot : (projPot * 70n) / 100n;
+
   // Record match outcome + settlement into local history (§46).
   useEffect(() => {
     if (phase === "ended" && net?.matchId && net.rankings) {
@@ -631,40 +645,112 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
         </div>
       )}
 
-      {phase === "joining" && (net?.lobbyPlayers?.length ?? 1) < MIN_PLAYERS && (
-        <div className="panel accent stack">
-          <span style={{ fontSize: 12, color: "var(--orange)" }}>YOU'RE THE ONLY HUNTER IN {net?.room ?? "THIS ROOM"}</span>
-          <div className="note">
-            A MATCH NEEDS {MIN_PLAYERS}+ HUNTERS — YOU CAN'T STAKE OR PLAY SOLO. DON'T PAY YET.
-            SHARE THIS ROOM'S INVITE LINK; WHEN ANOTHER HUNTER JOINS, STAKING UNLOCKS FOR BOTH OF YOU.
+      {phase === "joining" && (
+        <div className="grid-2">
+          {/* LEFT — roster, ready-up, stake */}
+          <div className="panel stack">
+            <div className="row spread">
+              <span style={{ fontSize: 12, color: "var(--gold)" }}>WAITING ROOM · {net?.room ?? "ROOM"}</span>
+              <span className="tag hot">{net?.lobbyPlayers?.length ?? 1} HERE</span>
+            </div>
+
+            <div className="stack" style={{ gap: 6 }}>
+              {net?.lobbyPlayers.map((p) => (
+                <div key={p.id} className="row spread">
+                  <span className="note">
+                    <span style={{ color: p.joined ? "var(--green)" : p.ready ? "#ffcf6e" : "#555568" }}>●</span>{" "}
+                    {p.alias.toUpperCase()}{p.id === selfId ? " (YOU)" : ""}
+                  </span>
+                  <span className="note" style={{ fontSize: 9 }}>{p.joined ? "STAKED ✓" : p.ready ? "READY" : "NOT READY"}</span>
+                </div>
+              ))}
+            </div>
+
+            {!selfStaked && (
+              <>
+                <button className={`btn ${selfReady ? "green" : ""}`} onClick={() => c?.setReady(!selfReady)}>
+                  {selfReady ? "✓ READY — TAP TO STAND DOWN" : "I'M READY TO PLAY"}
+                </button>
+                {stakingUnlocked && selfReady ? (
+                  <>
+                    <div className="note" style={{ color: "var(--green)" }}>
+                      {readyCount} HUNTERS READY — LOCK IN YOUR STAKE TO PLAY. NOTHING MOVED UNTIL YOU PAY.
+                    </div>
+                    <button className="btn" disabled={joinBusy} onClick={() => void payEntry()}>
+                      {joinBusy
+                        ? (tx.phase === "signing" ? `APPROVE IN WALLET — STAKING ${formatAsset(ENTRY_BASE_UNITS)}…`
+                          : tx.phase === "confirming" ? "CONFIRMING ON-CHAIN…" : (tx.phase.toUpperCase() + "…"))
+                        : `PAY ENTRY · ${formatAsset(ENTRY_BASE_UNITS)}`}
+                    </button>
+                    {tx.phase === "failed" && <div className="err">{(tx.error ?? "TRANSACTION FAILED").toUpperCase().slice(0, 120)}</div>}
+                  </>
+                ) : (
+                  <>
+                    <div className="note">
+                      {needReady > 0
+                        ? `WAITING FOR ${needReady} MORE HUNTER${needReady > 1 ? "S" : ""} TO READY UP (NEED ${MIN_PLAYERS}). STAKING UNLOCKS THEN.`
+                        : "READY UP ABOVE TO UNLOCK STAKING."}
+                    </div>
+                    {net?.room && (
+                      <button className="btn small" onClick={() => copyInvite(net.room!)}>
+                        {copied === net.room ? "INVITE COPIED ✓" : `⧉ INVITE A FRIEND · ${net.room}`}
+                      </button>
+                    )}
+                  </>
+                )}
+                <button className="btn small ghost" onClick={() => setPracticeWait((v) => !v)}>
+                  {practiceWait ? "✕ STOP PRACTICE" : "🕹 PRACTICE WHILE YOU WAIT"}
+                </button>
+              </>
+            )}
+            {selfStaked && (
+              <div className="note" style={{ color: "var(--green)" }}>
+                STAKED ✓ — WAITING FOR THE MATCH TO START ({paidCount} STAKED, NEED {MIN_PLAYERS}+). IT BEGINS WHEN {MIN_PLAYERS}+ HAVE STAKED OR THE ROOM FILLS.
+              </div>
+            )}
           </div>
-          {net?.room && (
-            <button className="btn" onClick={() => copyInvite(net.room!)}>
-              {copied === net.room ? "INVITE LINK COPIED ✓" : `⧉ COPY INVITE LINK · ${net.room}`}
-            </button>
-          )}
-          <div className="note" style={{ fontSize: 9 }}>NO ONE TO PLAY WITH? TRY PRACTICE MODE (NO WALLET, VS BOTS). NOTHING IS STAKED HERE — YOUR aBTC IS UNTOUCHED.</div>
+
+          {/* RIGHT — payout preview + room chat */}
+          <div className="stack">
+            <div className="panel accent stack">
+              <span style={{ fontSize: 12, color: "var(--orange)" }}>STAKE {formatAsset(ENTRY_BASE_UNITS)} · WINNER TAKES</span>
+              <div className="note">GRAB LOOT, RUN IT TO THE BANK — MOST BANKED IN {MATCH_SECONDS}s WINS. 0% FEE.</div>
+              <div className="note">
+                <b>2–3 HUNTERS:</b> WINNER TAKES THE WHOLE POT.<br />
+                <b>4–8 HUNTERS:</b> TOP 3 SPLIT <b>70 / 20 / 10</b>.
+              </div>
+              <div className="note" style={{ color: "var(--gold)", fontSize: 11 }}>
+                WITH {projected} HUNTERS → POT {formatAsset(projPot)} · WINNER TAKES {formatAsset(projWinner)}{projected >= 4 ? " (1ST)" : ""}.
+              </div>
+              <div className="note" style={{ fontSize: 9 }}>NEVER FILLS OR SETTLES? RECLAIM YOUR STAKE ON-CHAIN. TESTNET · NO REAL VALUE.</div>
+            </div>
+
+            <div className="panel stack">
+              <span style={{ fontSize: 11, color: "var(--gold)" }}>ROOM CHAT</span>
+              <div style={{ maxHeight: 140, overflowY: "auto" }} className="stack">
+                {(net?.chat ?? []).slice(-14).map((m, i) => (
+                  <div key={i} className="note" style={{ fontSize: 10 }}>
+                    <b style={{ color: m.from === selfId ? "var(--green)" : "var(--orange)" }}>{m.alias.toUpperCase()}:</b> {m.text}
+                  </div>
+                ))}
+                {(net?.chat?.length ?? 0) === 0 && <div className="note" style={{ fontSize: 9 }}>SAY HI WHILE YOU WAIT…</div>}
+              </div>
+              <form className="row" onSubmit={(e) => { e.preventDefault(); const t = chatInput.trim(); if (t) { c?.sendChat(t); setChatInput(""); } }}>
+                <input className="pix" style={{ flex: 1 }} maxLength={160} value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)} placeholder="MESSAGE…" />
+                <button className="btn small" type="submit">SEND</button>
+              </form>
+            </div>
+          </div>
         </div>
       )}
 
-      {phase === "joining" && (net?.lobbyPlayers?.length ?? 1) >= MIN_PLAYERS && (
+      {phase === "joining" && practiceWait && !selfStaked && (
         <div className="panel stack">
-          <span style={{ fontSize: 11 }}>JOIN {net?.room ?? "ROOM"} · STAKE {formatAsset(ENTRY_BASE_UNITS)} · {net?.lobbyPlayers?.length ?? 2} HUNTERS HERE</span>
-          <div className="steps">
-            <div className="step"><span className="n">1</span><span className="t">YOU STAKE <b>{formatAsset(ENTRY_BASE_UNITS)}</b> INTO THIS ROOM'S ON-CHAIN VAULT.</span></div>
-            <div className="step"><span className="n">2</span><span className="t">MATCH STARTS ONCE <b>{MIN_PLAYERS}+ HUNTERS</b> HAVE STAKED (OR THE ROOM FILLS).</span></div>
-            <div className="step"><span className="n">3</span><span className="t">WINNERS SPLIT THE VAULT <b>70/20/10</b> (WINNER TAKES ALL UNDER 4). 0% FEE.</span></div>
-            <div className="step"><span className="n">4</span><span className="t">IF IT NEVER FILLS OR SETTLES, <b>RECLAIM YOUR STAKE</b> ON-CHAIN — NOTHING IS LOST.</span></div>
+          <div className="row spread">
+            <span style={{ fontSize: 11, color: "var(--gold)" }}>PRACTICE — VS BOTS, NOTHING STAKED (THE MATCH STARTS AUTOMATICALLY WHEN IT'S READY)</span>
           </div>
-          <button className="btn" disabled={joinBusy} onClick={() => void payEntry()}>
-            {joinBusy
-              ? (tx.phase === "signing" ? `APPROVE IN WALLET — STAKING ${formatAsset(ENTRY_BASE_UNITS)}…`
-                : tx.phase === "confirming" ? "CONFIRMING ON-CHAIN…"
-                : (tx.phase.toUpperCase() + "…"))
-              : `PAY ENTRY · ${formatAsset(ENTRY_BASE_UNITS)}`}
-          </button>
-          <div className="note" style={{ fontSize: 9 }}>ENTRY IS FIXED AT {formatAsset(ENTRY_BASE_UNITS)} FOR SCRAMBLE_V1 · SAME FOR EVERY PLAYER · NO REAL VALUE (TESTNET)</div>
-          {tx.phase === "failed" && <div className="err">{(tx.error ?? "TRANSACTION FAILED").toUpperCase().slice(0, 120)}</div>}
+          <Practice alias={props.alias} onExit={() => setPracticeWait(false)} />
         </div>
       )}
 

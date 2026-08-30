@@ -28,8 +28,10 @@ export type Session = {
   resumeToken: string;
   room: Room | null;
   joinedOnChain: boolean;
+  readyToStake: boolean; // pre-stake "I'm in" green light
   inputTimestamps: number[];
   disconnectedAt: number | null;
+  chatTimestamps: number[];
 };
 
 type RoomPhase = "waiting" | "lobby" | "countdown" | "live" | "ended";
@@ -252,6 +254,7 @@ export class Room {
     this.tick = 0;
     for (const s of this.sessions.values()) {
       s.joinedOnChain = false;
+      s.readyToStake = false;
       s.room = null;
     }
     this.sessions.clear();
@@ -331,8 +334,25 @@ export class Room {
 
   private playerRows() {
     return [...this.sessions.values()].map((s) => ({
-      id: s.pubkey, alias: s.alias, joined: s.joinedOnChain,
+      id: s.pubkey, alias: s.alias, joined: s.joinedOnChain, ready: s.readyToStake,
     }));
+  }
+
+  /** Pre-stake green light: staking unlocks once MIN_PLAYERS are ready. */
+  setReady(sess: Session, ready: boolean): void {
+    if (sess.room !== this) return;
+    sess.readyToStake = ready;
+    this.broadcastRoomState();
+  }
+
+  /** Relay a lobby chat line (rate-limited, already sanitized/clamped upstream). */
+  relayChat(sess: Session, text: string): void {
+    if (sess.room !== this) return;
+    const now = Date.now();
+    sess.chatTimestamps = sess.chatTimestamps.filter((t) => now - t < 5000);
+    if (sess.chatTimestamps.length >= 6) return; // max 6 lines / 5s
+    sess.chatTimestamps.push(now);
+    this.broadcast({ s: "chat", from: sess.pubkey, alias: sess.alias, text, ts: now });
   }
 
   broadcastRoomState(): void {
