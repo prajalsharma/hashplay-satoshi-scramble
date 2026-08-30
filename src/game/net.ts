@@ -67,6 +67,7 @@ export class GameClient {
   private reconnects = 0;
   private stopped = false;
   private authedOnce = false;
+  private authInFlight = false;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   connect(): void {
@@ -128,15 +129,24 @@ export class GameClient {
           this.ws!.send(enc({ c: "resume", resumeToken: existing }));
           return;
         }
+        // Never stack a second wallet popup. If a sign-in is already open (e.g.
+        // the socket blipped and reconnected while the wallet was still waiting
+        // for approval), don't fire another — one popup at a time, period.
+        if (this.authInFlight) return;
+        this.authInFlight = true;
         this.push({ phase: "authing" });
         this.ws!.send(enc({ c: "hello", pubkey: this.signer.publicKeyHex, alias: this.alias }));
         try {
           // SIWE-style: sign a READABLE login message, never a raw hash. This
           // signature can never be replayed as a transaction (see protocol.ts).
           const sig = await this.signer.signLogin(loginMessage(m.nonceHex));
-          this.ws!.send(enc({ c: "auth", sig64Hex: [...sig].map((b) => b.toString(16).padStart(2, "0")).join("") }));
+          if (this.ws && this.ws.readyState === this.ws.OPEN) {
+            this.ws.send(enc({ c: "auth", sig64Hex: [...sig].map((b) => b.toString(16).padStart(2, "0")).join("") }));
+          }
         } catch (e) {
           this.push({ phase: "error", error: `WALLET DECLINED SIGN-IN — ${(e as Error).message}`.toUpperCase() });
+        } finally {
+          this.authInFlight = false;
         }
         return;
       }

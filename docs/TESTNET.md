@@ -16,9 +16,16 @@
 ## Wallet requirements
 A Bitcoin wallet with a **Taproot (P2TR)** address and some testnet **aBTC**:
 Arch Wallet extension (recommended — human-verified), UniSat, Xverse,
-Phantom, or Leather. Also needs a little native balance for gas — the app
-auto-airdrops it. Getting testnet aBTC itself is currently via holding/
-transfer (its faucet is behind Arch's key-gated Wallet Hub — see below).
+Phantom, or Leather. The **player creates no on-chain account** when joining
+(the server/authority creates the Match PDA + vault ATA and funds their
+Solana-style rent), so a player needs aBTC to stake and essentially no native
+balance of their own — the frontend does NOT airdrop to the player. Getting
+testnet aBTC is via holding/transfer (Arch documents no public aBTC faucet).
+
+Note: with the Arch Wallet the approval popup renders a Bitcoin "Sign
+Transaction" PSBT with a single **OP_RETURN** output — this is the standard
+**BIP-322** to-sign transaction (a zero-value dummy), NOT a real BTC spend; it
+moves no Bitcoin. Confirmed against Arch-Network/arch-wallet-connect-kit.
 
 ## Match flow (on-chain)
 1. Server `create_match(match_id, max_players)` → creates the Match PDA + its

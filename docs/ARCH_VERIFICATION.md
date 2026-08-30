@@ -23,10 +23,10 @@ probes (2026-08-28/29).
 | Indexer: token metadata/holdings | GET `/api/v1/testnet/tokens/{mint}`, `/accounts/{addr}/tokens` | explorer.arch.network — **keyless** | — | testnet | VERIFIED 08-29 |
 | Indexer WebSocket | — | `wss://explorer.arch.network/ws/testnet` and variants refuse; official arch-indexer repo is REST-only | — | — | VERIFIED ABSENT — do not build against it |
 | ARCH_API_KEY | — | every endpoint above is keyless; only Arch's Wallet-Hub `/v1` service wants keys (unused here) | — | — | VERIFIED UNNECESSARY |
-| Tx fee | ~5,000 native units per transaction | observed ledger deltas | — | testnet | VERIFIED 08-28 |
+| Tx cost model | Arch has **no metered per-tx fee field** (runtime tx message = `{signers, instructions}`, no fee/fee-payer/compute-budget); native `lamports` are **Solana-style rent** funded when creating accounts. The ~5,000-unit deltas observed 08-28 were account-creation rent, not a gas fee. | book.arch.network `program/accounts.md`, `sdk/runtime-transaction.md` | — | testnet | VERIFIED 08-30 |
 | aBTC mint | `/tokens/1d46e0dd…` → "Arch BTC", aBTC, 8dp, 292 holders | indexer | — | testnet | VERIFIED 08-29 |
 | Wallet Hub (email wallets, faucet) | hub.arch.network/v1 → 401 "Missing API key" | live probe | sdk 0.1.1 | — | VERIFIED KEY-GATED — out of MVP scope |
-| aBTC public faucet path | — | — | — | testnet | **UNKNOWN — REQUIRES VERIFICATION** |
+| aBTC public faucet path | none — Arch's dev docs document no testnet aBTC/aUSD faucet; only `request_airdrop`/`create_account_with_faucet` fund NATIVE balance (rent), not assets | book.arch.network `rpc/rpc.md`, `apl/*` | — | testnet | VERIFIED-ABSENT 08-30 (was UNKNOWN) |
 | Xverse/Phantom/Leather direct signing | implemented per provider docs + Arch Wallet extension source conventions | — | — | testnet | INFERRED-correct; human test pending |
 
 Rule for this repo: any operation not in this table gets verified (and added
