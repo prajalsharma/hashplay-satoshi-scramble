@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CANVAS_H, CANVAS_W, drawArena, type View } from "./game/renderer";
 import { attachInput } from "./game/input";
-import { PracticeGame, PRACTICE_SELF } from "./game/practice";
+import { PracticeGame, PRACTICE_SELF, type Difficulty } from "./game/practice";
 import { GameClient, type NetState } from "./game/net";
 import {
   connectWallet, detectWallets, disconnectWallet, silentArch,
@@ -454,12 +454,15 @@ function ArenaView(props: {
 // ---------------------------------------------------------------------------
 
 function Practice(props: { alias: string; onExit: () => void }) {
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const gameRef = useRef<PracticeGame | null>(null);
-  if (!gameRef.current) gameRef.current = new PracticeGame(props.alias);
+  if (!gameRef.current) gameRef.current = new PracticeGame(props.alias, difficulty);
   const game = gameRef.current;
   const [board, setBoard] = useState(game.leaderboard());
   const [done, setDone] = useState(false);
 
+  // Live difficulty change (also carries into the next 'RUN IT BACK').
+  useEffect(() => { gameRef.current?.setDifficulty(difficulty); }, [difficulty]);
   useEffect(() => attachInput((m) => game.setMask(m)), [game]);
   useEffect(() => {
     const t = setInterval(() => {
@@ -473,7 +476,7 @@ function Practice(props: { alias: string; onExit: () => void }) {
     <div className="overlay">
       <div className="big">#{board.find((r) => r.id === PRACTICE_SELF)?.rank ?? "-"}</div>
       <div style={{ fontSize: 11 }}>{board.find((r) => r.id === PRACTICE_SELF)?.banked ?? 0} BANKED · PRACTICE ONLY</div>
-      <button className="btn" onClick={() => { gameRef.current = new PracticeGame(props.alias); setDone(false); }}>
+      <button className="btn" onClick={() => { gameRef.current = new PracticeGame(props.alias, difficulty); setDone(false); }}>
         RUN IT BACK
       </button>
       <button className="btn ghost" onClick={props.onExit}>EXIT PRACTICE</button>
@@ -485,8 +488,17 @@ function Practice(props: { alias: string; onExit: () => void }) {
   return (
     <div className="stack">
       <div className="row spread">
-        <span className="tag warn">PRACTICE MODE · LOCAL BOTS · NOTHING REAL AT STAKE</span>
-        <button className="btn small ghost" onClick={props.onExit}>← EXIT</button>
+        <span className="tag warn">PRACTICE · LOCAL BOTS · NOTHING AT STAKE</span>
+        <div className="row" style={{ gap: 6 }}>
+          <span className="note" style={{ fontSize: 9 }}>BOTS:</span>
+          {(["easy", "medium", "hard"] as Difficulty[]).map((d) => (
+            <button key={d} className={`btn small ${difficulty === d ? "green" : "ghost"}`}
+              onClick={() => setDifficulty(d)} title={`${d} bots`}>
+              {d.toUpperCase()}
+            </button>
+          ))}
+          <button className="btn small ghost" onClick={props.onExit}>← EXIT</button>
+        </div>
       </div>
       <ArenaView getView={(now) => gameRef.current!.frame(now)} selfId={PRACTICE_SELF} overlay={overlay} leaderboard={board} />
     </div>
