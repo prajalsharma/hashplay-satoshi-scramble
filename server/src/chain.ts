@@ -49,12 +49,28 @@ export async function ensureServerFunded(): Promise<void> {
 export async function createMatchOnChain(matchId: bigint, maxPlayers: number): Promise<string> {
   const s = serverSigner();
   const mp = matchPda(matchId);
-  const txid = await signAndSend(s, [
-    createAtaIdempotentIx(s.publicKey, mp),
-    createMatchIx(s.publicKey, matchId, maxPlayers),
-  ]);
-  console.log(`[chain] match ${matchId} created (${txid.slice(0, 10)}…)`);
-  return txid;
+  // Idempotent: if this match PDA already exists (a join race, or a retry after
+  // the server restarted mid-cycle), reuse it instead of a create that fails
+  // with "an account with the same address already exists".
+  if (await readMatch(matchId)) {
+    console.log(`[chain] match ${matchId} already on-chain — reusing`);
+    return "existing";
+  }
+  try {
+    const txid = await signAndSend(s, [
+      createAtaIdempotentIx(s.publicKey, mp),
+      createMatchIx(s.publicKey, matchId, maxPlayers),
+    ]);
+    console.log(`[chain] match ${matchId} created (${txid.slice(0, 10)}…)`);
+    return txid;
+  } catch (e) {
+    // Lost a create race — the other writer already made it; that's success.
+    if (/already exists/i.test(e instanceof Error ? e.message : String(e))) {
+      console.log(`[chain] match ${matchId} created concurrently — reusing`);
+      return "existing";
+    }
+    throw e;
+  }
 }
 
 export async function readMatch(matchId: bigint): Promise<OnChainMatch | null> {
