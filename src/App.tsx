@@ -19,7 +19,7 @@ import { readAccount } from "./arch/rpc";
 import {
   ASSET_MINT_HEX, formatAsset, GAME_WS_URL, NETWORK_LABEL, SCRAMBLE_PROGRAM_ID_HEX,
 } from "./arch/config";
-import { ENTRY_BASE_UNITS, MATCH_SECONDS, RULESET_VERSION } from "./shared/constants";
+import { ENTRY_BASE_UNITS, MATCH_SECONDS, MIN_PLAYERS, RULESET_VERSION } from "./shared/constants";
 import type { RoomInfo } from "./shared/protocol";
 
 const ROSTER: WalletKind[] = ["arch", "xverse", "phantom", "unisat", "leather"];
@@ -70,6 +70,13 @@ export function App() {
     const t = setInterval(() => void refreshBalance(), 8000);
     return () => clearInterval(t);
   }, [refreshBalance]);
+
+  // Invite deep-link: ?room=… with a connected wallet drops straight into live
+  // mode; the Live view then auto-joins that room. (Connect first if no wallet.)
+  useEffect(() => {
+    const room = new URLSearchParams(location.search).get("room");
+    if (room && signer && mode === "home") setMode("live");
+  }, [signer, mode]);
 
   const doConnect = async (kind: WalletKind) => {
     setModal(false);
@@ -447,6 +454,31 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
   const c = clientRef.current;
   const phase = net?.phase ?? "connecting";
 
+  // Shareable invite: ?room=ROOM-01 deep-links a friend straight to that room.
+  const inviteRoom = typeof location !== "undefined"
+    ? new URLSearchParams(location.search).get("room")
+    : null;
+  const autoJoined = useRef(false);
+  const [copied, setCopied] = useState("");
+  useEffect(() => {
+    if (!autoJoined.current && inviteRoom && phase === "rooms" &&
+        net?.rooms.some((r) => r.room === inviteRoom)) {
+      autoJoined.current = true;
+      c?.joinRoom(inviteRoom);
+    }
+  }, [phase, net, inviteRoom, c]);
+  const copyInvite = (room: string) => {
+    const url = `${location.origin}${location.pathname}?room=${room}`;
+    void navigator.clipboard?.writeText(url).then(() => {
+      setCopied(room);
+      setTimeout(() => setCopied(""), 2000);
+    });
+  };
+
+  // Lobby: how many more paid players are needed before the match can start.
+  const paidCount = net?.lobbyPlayers.filter((p) => p.joined).length ?? 0;
+  const needMore = Math.max(0, MIN_PLAYERS - paidCount);
+
   const payEntry = async () => {
     if (!c || !net?.matchId) return;
     setJoinBusy(true);
@@ -502,10 +534,16 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
       {phase === "rooms" && (
         <div className="panel stack">
           <span style={{ fontSize: 11 }}>PICK A ROOM</span>
+          <div className="note">NEEDS {MIN_PLAYERS}+ HUNTERS TO START. PLAYING SOLO? SEND A ROOM'S INVITE LINK TO A FRIEND — YOU BOTH LAND IN THE SAME ARENA.</div>
           {net?.rooms.map((r) => (
             <div key={r.room} className="row spread">
               <span className="note">{r.room} · {r.players}/{r.capacity} · ENTRY {formatAsset(BigInt(r.entryBaseUnits))}</span>
-              <button className="btn small green" onClick={() => c?.joinRoom(r.room)}>JOIN</button>
+              <div className="row">
+                <button className="btn small ghost" onClick={() => copyInvite(r.room)}>
+                  {copied === r.room ? "LINK COPIED ✓" : "⧉ INVITE"}
+                </button>
+                <button className="btn small green" onClick={() => c?.joinRoom(r.room)}>JOIN</button>
+              </div>
             </div>
           ))}
         </div>
@@ -513,27 +551,47 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
 
       {phase === "joining" && (
         <div className="panel stack">
-          <span style={{ fontSize: 11 }}>ENTRY: {formatAsset(ENTRY_BASE_UNITS)}</span>
-          <div className="note">
-            YOUR ENTRY GOES INTO THE MATCH VAULT ON ARCH. WINNERS ARE PAID FROM IT
-            AUTOMATICALLY; IF THE MATCH NEVER SETTLES YOU CAN RECLAIM IT ON-CHAIN.
+          <span style={{ fontSize: 11 }}>JOIN {net?.room ?? "ROOM"} · STAKE {formatAsset(ENTRY_BASE_UNITS)}</span>
+          <div className="steps">
+            <div className="step"><span className="n">1</span><span className="t">YOU STAKE <b>{formatAsset(ENTRY_BASE_UNITS)}</b> INTO THIS ROOM'S ON-CHAIN VAULT.</span></div>
+            <div className="step"><span className="n">2</span><span className="t">MATCH STARTS ONCE <b>{MIN_PLAYERS}+ HUNTERS</b> HAVE STAKED (OR THE ROOM FILLS).</span></div>
+            <div className="step"><span className="n">3</span><span className="t">WINNERS SPLIT THE VAULT <b>70/20/10</b> (WINNER TAKES ALL UNDER 4). 0% FEE.</span></div>
+            <div className="step"><span className="n">4</span><span className="t">IF IT NEVER FILLS OR SETTLES, <b>RECLAIM YOUR STAKE</b> ON-CHAIN — NOTHING IS LOST.</span></div>
           </div>
           <button className="btn" disabled={joinBusy} onClick={() => void payEntry()}>
-            {joinBusy ? tx.phase.toUpperCase() + "…" : `PAY ENTRY · ${formatAsset(ENTRY_BASE_UNITS)}`}
+            {joinBusy
+              ? (tx.phase === "signing" ? `APPROVE IN WALLET — STAKING ${formatAsset(ENTRY_BASE_UNITS)}…`
+                : tx.phase === "confirming" ? "CONFIRMING ON-CHAIN…"
+                : (tx.phase.toUpperCase() + "…"))
+              : `PAY ENTRY · ${formatAsset(ENTRY_BASE_UNITS)}`}
           </button>
+          <div className="note" style={{ fontSize: 9 }}>ENTRY IS FIXED AT {formatAsset(ENTRY_BASE_UNITS)} FOR SCRAMBLE_V1 · SAME FOR EVERY PLAYER · NO REAL VALUE (TESTNET)</div>
           {tx.phase === "failed" && <div className="err">{(tx.error ?? "TRANSACTION FAILED").toUpperCase().slice(0, 120)}</div>}
         </div>
       )}
 
       {phase === "lobby" && (
         <div className="panel stack">
-          <span style={{ fontSize: 11 }}>WAITING FOR HUNTERS…</span>
+          <span style={{ fontSize: 11, color: "var(--orange)" }}>
+            {needMore > 0
+              ? `WAITING FOR ${needMore} MORE HUNTER${needMore > 1 ? "S" : ""} TO START…`
+              : "READY — MATCH STARTING…"}
+          </span>
           {net?.lobbyPlayers.map((p) => (
             <div key={p.id} className="note">
-              {p.alias.toUpperCase()} {p.joined ? "· ENTRY PAID ✓" : "· PAYING…"}
+              {p.alias.toUpperCase()} {p.joined ? "· STAKE PAID ✓" : "· STAKING…"}
             </div>
           ))}
-          <div className="note">MATCH STARTS WHEN THE ROOM FILLS OR THE 30S WINDOW CLOSES (MIN 2).</div>
+          {needMore > 0 && net?.room && (
+            <>
+              <div className="note">YOU'RE IN AND STAKED. NEED {needMore} MORE — SEND THIS LINK TO A FRIEND SO THEY LAND IN {net.room}:</div>
+              <button className="btn small" onClick={() => copyInvite(net.room!)}>
+                {copied === net.room ? "INVITE LINK COPIED ✓" : `⧉ COPY INVITE LINK · ${net.room}`}
+              </button>
+              <div className="note" style={{ fontSize: 9 }}>NO SECOND PLAYER? YOUR STAKE IS SAFE — RECLAIM IT ON-CHAIN AFTER THE DEADLINE. OR TRY PRACTICE MODE (NO WALLET, PLAY VS BOTS).</div>
+            </>
+          )}
+          <div className="note">MATCH STARTS WHEN {MIN_PLAYERS}+ HUNTERS HAVE STAKED (OR THE ROOM FILLS TO 8).</div>
         </div>
       )}
 
