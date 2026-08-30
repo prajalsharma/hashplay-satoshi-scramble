@@ -81,20 +81,44 @@ export async function readMatch(matchId: bigint): Promise<OnChainMatch | null> {
 export async function settleOnChain(result: CanonicalResult): Promise<{ txid: string; hash: string }> {
   const s = serverSigner();
   const hash = resultHash(result);
-  // Log the canonical bytes length for observability (never secrets).
   console.log(
     `[chain] settling match ${result.matchId}: hash=${hash.slice(0, 16)}… bytes=${encodeResult(result).length}`,
   );
   const joined = result.players.length;
+
+  // CRITICAL: the program pays m.players[rankings[k]] using the ON-CHAIN join
+  // order. The server's joinOrder (confirmReady order) can differ from that when
+  // two joins land near-simultaneously, which would make verify_player_ata
+  // revert the whole settlement (funds stranded until reclaim). So remap rankings
+  // and winners into the on-chain m.players order read back from the match.
+  const m = await readMatch(result.matchId);
+  if (!m) throw new Error(`match ${result.matchId} not found on-chain`);
+  const chainOrder = m.players.slice(0, joined); // hex ids, on-chain slot order
+  const rankedIds = result.rankings.map((idx) => result.players[idx]!.id);
+  const chainRankings = rankedIds.map((id) => chainOrder.indexOf(id));
+  if (chainRankings.some((r) => r < 0)) {
+    throw new Error("a ranked player is missing from the on-chain match — refusing to settle");
+  }
   const payoutCount = joined >= 4 ? Math.min(3, joined) : 1;
-  const winners = result.rankings
-    .slice(0, payoutCount)
-    .map((idx) => result.players[idx]!.id);
-  const txid = await signAndSend(
-    s,
-    [settleMatchIx(s.publicKey, result.matchId, hash, result.rankings, winners)],
-  );
-  return { txid, hash };
+  const winners = chainRankings.slice(0, payoutCount).map((ci) => chainOrder[ci]!);
+
+  // Retry a transient failure — settlement must not strand funds on a blip.
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const txid = await signAndSend(
+        s,
+        [settleMatchIx(s.publicKey, result.matchId, hash, chainRankings, winners)],
+      );
+      return { txid, hash };
+    } catch (e) {
+      lastErr = e;
+      // A real terminal state (already settled/refunded) must not be retried.
+      if (/already|settled|refund|0x0\b|0x12\b/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }
+  throw lastErr;
 }
 
 export const newNonceHex = (): string => randomBytes(32).toString("hex");
