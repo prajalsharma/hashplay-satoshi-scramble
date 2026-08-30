@@ -17,7 +17,7 @@ import { signAndSend, type TxProgress } from "./arch/txSend";
 import { ataOf, decodeTokenAmount, joinMatchIx } from "./arch/program";
 import { readAccount } from "./arch/rpc";
 import {
-  ASSET_MINT_HEX, formatAsset, GAME_WS_URL, NETWORK_LABEL, SCRAMBLE_PROGRAM_ID_HEX,
+  ASSET_MINT_HEX, explorerTxUrl, formatAsset, GAME_WS_URL, NETWORK_LABEL, SCRAMBLE_PROGRAM_ID_HEX,
 } from "./arch/config";
 import { ENTRY_BASE_UNITS, MATCH_SECONDS, MIN_PLAYERS, RULESET_VERSION } from "./shared/constants";
 import type { RoomInfo } from "./shared/protocol";
@@ -39,6 +39,27 @@ const ensureAlias = (): string => {
   const fresh = `HUNTER-${Math.floor(1000 + Math.random() * 9000)}`;
   try { localStorage.setItem(ALIAS_KEY, fresh); } catch { /* ephemeral */ }
   return fresh;
+};
+
+// --- Match history (§46): per-browser record of matches this wallet played ---
+const HISTORY_KEY = "scramble.history.v1";
+type HistoryEntry = {
+  matchId: string; pda: string | null; room: string; stakeBase: string; ts: number;
+  players?: number; myRank?: number; resultHash?: string;
+  settleTxid?: string; settleState?: string;
+};
+const readHistory = (): HistoryEntry[] => {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]") as HistoryEntry[]; }
+  catch { return []; }
+};
+const upsertHistory = (e: Partial<HistoryEntry> & { matchId: string }): void => {
+  try {
+    const all = readHistory();
+    const i = all.findIndex((h) => h.matchId === e.matchId);
+    if (i >= 0) all[i] = { ...all[i], ...e };
+    else all.unshift(e as HistoryEntry);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, 25)));
+  } catch { /* history is best-effort */ }
 };
 
 type Mode = "home" | "practice" | "live";
@@ -195,6 +216,7 @@ function Home(props: {
   onNeedWallet: () => void;
 }) {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
+  const [history] = useState(readHistory);
   const [serverUp, setServerUp] = useState<boolean | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameVal, setRenameVal] = useState("");
@@ -319,6 +341,31 @@ function Home(props: {
           </div>
         ))}
       </div>
+
+      {history.length > 0 && (
+        <div className="panel stack">
+          <span style={{ fontSize: 13, color: "var(--orange)" }}>YOUR MATCHES</span>
+          {history.slice(0, 8).map((h) => {
+            const result = h.myRank == null ? "PENDING"
+              : h.myRank === 0 ? "1ST · WON"
+              : h.myRank === 1 ? "2ND" : h.myRank === 2 ? "3RD" : `${h.myRank + 1}TH`;
+            return (
+              <div key={h.matchId} className="room">
+                <div>
+                  <div className="rname">{h.room || "MATCH"} · {result}</div>
+                  <div className="rmeta">
+                    STAKE {formatAsset(BigInt(h.stakeBase))} · {h.players ?? "?"}P · {new Date(h.ts).toLocaleDateString()} {new Date(h.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {h.settleTxid
+                      ? <> · <a href={explorerTxUrl(h.settleTxid)} target="_blank" rel="noreferrer" style={{ color: "var(--green)" }}>SETTLED ↗</a></>
+                      : h.settleState ? ` · ${h.settleState.toUpperCase()}` : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div className="note" style={{ fontSize: 9 }}>STORED IN THIS BROWSER · VERIFY ANY MATCH ON-CHAIN VIA ITS SETTLEMENT LINK</div>
+        </div>
+      )}
       </div>
     </div>
   );
@@ -479,6 +526,20 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
   const paidCount = net?.lobbyPlayers.filter((p) => p.joined).length ?? 0;
   const needMore = Math.max(0, MIN_PLAYERS - paidCount);
 
+  // Record match outcome + settlement into local history (§46).
+  useEffect(() => {
+    if (phase === "ended" && net?.matchId && net.rankings) {
+      const mine = net.rankings.find((r) => r.id === props.signer.publicKeyHex);
+      upsertHistory({ matchId: net.matchId, players: net.rankings.length,
+        myRank: mine?.rank, resultHash: net.resultHash ?? undefined });
+    }
+  }, [phase, net?.matchId, net?.rankings, net?.resultHash, props.signer.publicKeyHex]);
+  useEffect(() => {
+    if (net?.matchId && net?.settlement) {
+      upsertHistory({ matchId: net.matchId, settleTxid: net.settlement.txid, settleState: net.settlement.state });
+    }
+  }, [net?.matchId, net?.settlement]);
+
   const payEntry = async () => {
     if (!c || !net?.matchId) return;
     setJoinBusy(true);
@@ -494,6 +555,8 @@ function Live(props: { signer: ArchSigner; alias: string; onExit: () => void; on
       await signAndSend(props.signer, [joinMatchIx(props.signer.publicKey, BigInt(net.matchId))], setTx);
       props.onBalance();
       c.ready();
+      upsertHistory({ matchId: net.matchId, pda: net.matchPdaHex, room: net.room ?? "",
+        stakeBase: ENTRY_BASE_UNITS.toString(), ts: Date.now() });
     } catch (e) {
       setTx({ phase: "failed", error: (e as Error).message });
     } finally {

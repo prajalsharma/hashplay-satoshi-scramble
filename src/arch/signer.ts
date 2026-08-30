@@ -172,13 +172,32 @@ const hexSigTo64 = (sigHex: string): Uint8Array => {
 // Connect
 // ---------------------------------------------------------------------------
 
+/**
+ * The Arch Wallet routes connect/sign through a hosted popup (hub.arch.network)
+ * that can hang without ever resolving. Bound every await so a stuck popup
+ * surfaces a clear, retryable error on our side instead of an infinite spinner.
+ * (We can't close their window, but we stop waiting on it.)
+ */
+const WALLET_TIMEOUT_MS = 45_000;
+function withTimeout<T>(p: Promise<T>, label: string, ms = WALLET_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out — the wallet didn't respond. Close its popup and try again, or connect with UniSat/Xverse.`)),
+        ms,
+      ),
+    ),
+  ]);
+}
+
 export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
   const w = window as any;
 
   if (kind === "arch") {
     const p = archProvider();
     if (!p) throw new Error("Arch Wallet extension not found");
-    const acct = await p.connect();
+    const acct = await withTimeout<any>(p.connect(), "Arch Wallet connect");
     const archAddress: string = acct?.archAddress ?? "";
     if (!archAddress) throw new Error("Arch Wallet returned no Arch address");
     const pubkeyHex = base58To32(archAddress);
@@ -190,12 +209,12 @@ export async function connectWallet(kind: WalletKind): Promise<ArchSigner> {
       publicKeyHex: pubkeyHex,
       sign: async (challenge) => {
         const raw = hexToBytes32(challengeToHexString(challenge));
-        const res = await p.signArchMessageHash(raw);
+        const res = await withTimeout<any>(p.signArchMessageHash(raw), "Arch Wallet signing");
         return hexSigTo64(String(res?.signature64Hex ?? ""));
       },
       signLogin: async (msg) => {
         // Message signing (readable) — NOT signArchMessageHash. Cannot be a tx.
-        const res = await p.signMessage(new TextEncoder().encode(msg));
+        const res = await withTimeout<any>(p.signMessage(new TextEncoder().encode(msg)), "Arch Wallet sign-in");
         return extractSchnorr(anySigToBytes(res?.signature ?? res));
       },
     };
